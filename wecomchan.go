@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"sync"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -24,12 +25,25 @@ var WecomCid = GetEnvDefault("WECOM_CID", "企业微信公司ID")
 var WecomSecret = GetEnvDefault("WECOM_SECRET", "企业微信应用Secret")
 var WecomAid = GetEnvDefault("WECOM_AID", "企业微信应用ID")
 var WecomToUid = GetEnvDefault("WECOM_TOUID", "@all")
+var CacheType = GetEnvDefault("CACHE_TYPE", "none") // 可选值: none, memory, redis
 var RedisStat = GetEnvDefault("REDIS_STAT", "OFF")
 var RedisAddr = GetEnvDefault("REDIS_ADDR", "localhost:6379")
 var RedisPassword = GetEnvDefault("REDIS_PASSWORD", "")
 var ctx = context.Background()
 
 /*-------------------------------  环境变量配置 end  -------------------------------*/
+
+/*-------------------------------  内存缓存配置 begin  -------------------------------*/
+
+type MemoryCache struct {
+	token      string
+	expireTime time.Time
+}
+
+var memoryCache MemoryCache
+var cacheMutex sync.RWMutex
+
+/*-------------------------------  内存缓存配置 end  -------------------------------*/
 
 /*-------------------------------  企业微信服务端API begin  -------------------------------*/
 
@@ -90,7 +104,7 @@ func ParseJson(jsonStr string) map[string]interface{} {
 	return wecomResponse
 }
 
-// GetRemoteToken 从企业微信服务端API获取access_token，存在redis服务则缓存
+// GetRemoteToken 从企业微信服务端API获取access_token，根据配置缓存到redis或内存
 func GetRemoteToken(corpId, appSecret string) string {
 	getTokenUrl := fmt.Sprintf(GetTokenApi, corpId, appSecret)
 	log.Println("getTokenUrl==>", getTokenUrl)
@@ -107,7 +121,8 @@ func GetRemoteToken(corpId, appSecret string) string {
 	log.Println("企业微信获取access_token接口返回==>", tokenResponse)
 	accessToken := tokenResponse[RedisTokenKey].(string)
 
-	if RedisStat == "ON" {
+	// 根据缓存类型选择存储方式
+	if CacheType == "redis" && RedisStat == "ON" {
 		log.Println("prepare to set redis key")
 		rdb := RedisClient()
 		// access_token有效时间为7200秒(2小时)
@@ -116,6 +131,15 @@ func GetRemoteToken(corpId, appSecret string) string {
 		if err != nil {
 			log.Println(err)
 		}
+	} else if CacheType == "memory" {
+		log.Println("prepare to set memory cache")
+		cacheMutex.Lock()
+		memoryCache = MemoryCache{
+			token:      accessToken,
+			expireTime: time.Now().Add(7000 * time.Second),
+		}
+		cacheMutex.Unlock()
+		log.Println("memory cache set successfully")
 	}
 	return accessToken
 }
@@ -199,14 +223,23 @@ func ValidateToken(errcode interface{}) bool {
 		return true
 	}
 
-	// 如果errcode为42001表明token已失效，则清空redis中的token缓存
+	// 如果errcode为42001表明token已失效，则清空缓存中的token
 	// 已知codeType为float64
 	if math.Abs(errcode.(float64)-float64(42001)) < 1e-3 {
-		if RedisStat == "ON" {
+		if CacheType == "redis" && RedisStat == "ON" {
 			log.Printf("token已失效，开始删除redis中的key==>%s", RedisTokenKey)
 			rdb := RedisClient()
 			rdb.Del(ctx, RedisTokenKey)
 			log.Printf("删除redis中的key==>%s完毕", RedisTokenKey)
+		} else if CacheType == "memory" {
+			log.Printf("token已失效，开始清除内存缓存")
+			cacheMutex.Lock()
+			memoryCache = MemoryCache{
+				token:      "",
+				expireTime: time.Time{},
+			}
+			cacheMutex.Unlock()
+			log.Printf("清除内存缓存完毕")
 		}
 		log.Println("现需重新获取token")
 		return false
@@ -217,7 +250,8 @@ func ValidateToken(errcode interface{}) bool {
 // GetAccessToken 获取企业微信的access_token
 func GetAccessToken() string {
 	accessToken := ""
-	if RedisStat == "ON" {
+
+	if CacheType == "redis" && RedisStat == "ON" {
 		log.Println("尝试从redis获取token")
 		rdb := RedisClient()
 		value, err := rdb.Get(ctx, RedisTokenKey).Result()
@@ -225,12 +259,21 @@ func GetAccessToken() string {
 			log.Println("access_token does not exist, need get it from remote API")
 		}
 		accessToken = value
+	} else if CacheType == "memory" {
+		log.Println("尝试从内存缓存获取token")
+		cacheMutex.RLock()
+		if !memoryCache.expireTime.IsZero() && time.Now().Before(memoryCache.expireTime) {
+			accessToken = memoryCache.token
+			log.Println("get access_token from memory cache")
+		} else {
+			log.Println("memory cache expired or empty")
+		}
+		cacheMutex.RUnlock()
 	}
+
 	if accessToken == "" {
 		log.Println("get access_token from remote API")
 		accessToken = GetRemoteToken(WecomCid, WecomSecret)
-	} else {
-		log.Println("get access_token from redis")
 	}
 	return accessToken
 }

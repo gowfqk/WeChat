@@ -9,6 +9,8 @@ services:
       - WECOM_SECRET=企业微信应用Secret
       - WECOM_AID=企业微信应用ID
       - WECOM_TOUID=@all
+      # 缓存类型: none(不缓存), memory(内存缓存), redis(Redis缓存)
+      - CACHE_TYPE=memory
     ports:
       - 8080:8080
     restart: unless-stopped

@@ -7,13 +7,20 @@
 - ✅ 支持多种消息类型：文本（text）、Markdown（markdown）、图片（image）
 - ✅ 支持多种传参方式：Body JSON传参、URL参数传参
 - ✅ 支持自定义接收人和应用ID
-- ✅ 支持Redis缓存access_token
+- ✅ 支持多种缓存方式：不缓存、内存缓存、Redis缓存
 - ✅ 支持Docker部署
 - ✅ 支持多架构构建（amd64、arm64）
 
 ## What's New
 
-### v2.2.0 - 最新更新
+### v2.3.0 - 最新更新
+
+- ✅ **新增内存缓存支持**
+  - 支持内存缓存access_token，无需Redis服务
+  - 适合单实例部署，配置简单
+  - 通过CACHE_TYPE环境变量控制缓存方式
+
+### v2.2.0
 
 - ✅ **新增Markdown消息类型支持**
   - 支持企业微信markdown格式消息
@@ -48,6 +55,7 @@ var WecomCid = GetEnvDefault("WECOM_CID", "企业微信公司ID")
 var WecomSecret = GetEnvDefault("WECOM_SECRET", "企业微信应用Secret")
 var WecomAid = GetEnvDefault("WECOM_AID", "企业微信应用ID")
 var WecomToUid = GetEnvDefault("WECOM_TOUID", "@all")
+var CacheType = GetEnvDefault("CACHE_TYPE", "none") // 可选值: none, memory, redis
 var RedisStat = GetEnvDefault("REDIS_STAT", "OFF")
 var RedisAddr = GetEnvDefault("REDIS_ADDR", "localhost:6379")
 var RedisPassword = GetEnvDefault("REDIS_PASSWORD", "")
@@ -121,6 +129,73 @@ docker run -dit -e SENDKEY=set_a_sendkey \
 |WECOM_SECRET|企业微信应用Secret|
 |WECOM_AID|企业微信应用ID|
 |WECOM_TOUID|需要发送给的人，详见[企业微信官方文档](https://work.weixin.qq.com/api/doc/90000/90135/90236#%E6%96%87%E6%9C%AC%E6%B6%88%E6%81%AF)|
+|CACHE_TYPE|缓存类型，可选值：`none`（不缓存）、`memory`（内存缓存）、`redis`（Redis缓存），默认为`none`|
+|REDIS_STAT|是否启用Redis缓存token，`ON`-启用，`OFF`-不启用（仅在CACHE_TYPE=redis时有效）|
+|REDIS_ADDR|Redis服务器地址，如不启用Redis缓存可不设置|
+|REDIS_PASSWORD|Redis的连接密码，如不启用Redis缓存可不设置|
+
+## 缓存方式说明
+
+### 1. 不使用缓存（默认）
+
+适用于低频调用场景，每次请求都会重新获取access_token。
+
+```bash
+docker run -d -p 8080:8080 \
+  -e SENDKEY=your_sendkey \
+  -e WECOM_CID=your_cid \
+  -e WECOM_SECRET=your_secret \
+  -e WECOM_AID=your_aid \
+  go-wecomchan
+```
+
+### 2. 内存缓存（推荐单实例使用）
+
+适用于单实例部署，无需额外服务，缓存有效期约2小时。
+
+```bash
+docker run -d -p 8080:8080 \
+  -e SENDKEY=your_sendkey \
+  -e WECOM_CID=your_cid \
+  -e WECOM_SECRET=your_secret \
+  -e WECOM_AID=your_aid \
+  -e CACHE_TYPE=memory \
+  go-wecomchan
+```
+
+**优点**：
+- ✅ 无需额外服务
+- ✅ 配置简单
+- ✅ 性能优于不缓存
+
+**缺点**：
+- ❌ 服务重启后缓存丢失
+- ❌ 多实例部署时缓存不共享
+
+### 3. Redis缓存（推荐多实例使用）
+
+适用于多实例部署，多个实例共享缓存，需要单独部署Redis服务。
+
+```bash
+docker run -d -p 8080:8080 \
+  -e SENDKEY=your_sendkey \
+  -e WECOM_CID=your_cid \
+  -e WECOM_SECRET=your_secret \
+  -e WECOM_AID=your_aid \
+  -e CACHE_TYPE=redis \
+  -e REDIS_STAT=ON \
+  -e REDIS_ADDR="redis-server:6379" \
+  -e REDIS_PASSWORD="your_redis_password" \
+  go-wecomchan
+```
+
+**优点**：
+- ✅ 多实例共享缓存
+- ✅ 缓存持久化
+- ✅ 适合高并发场景
+
+**缺点**：
+- ❌ 需要额外部署Redis服务
 
 ## 使用docker-compose 部署
 
