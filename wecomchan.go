@@ -56,12 +56,17 @@ var UploadMediaApi = "https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_to
 const RedisTokenKey = "access_token"
 
 // RequestBody 请求体结构体（支持JSON传参）
+// 支持两种格式：
+// 1. 简化格式（向后兼容）：{"msg_type": "text", "msg": "内容"}
+// 2. 官方格式（新增）：{"msg_type": "text", "text": {"content": "内容"}}
 type RequestBody struct {
-	Sendkey  string `json:"sendkey"`
-	Msg      string `json:"msg"`
-	MsgType  string `json:"msg_type"`
-	ToUser   string `json:"touser,omitempty"`  // 可选：覆盖默认的接收人
-	AgentId  string `json:"agentid,omitempty"` // 可选：覆盖默认的应用ID
+	Sendkey  string          `json:"sendkey"`
+	Msg      string          `json:"msg"`               // 简化格式：文本/Markdown内容
+	MsgType  string          `json:"msg_type"`
+	ToUser   string          `json:"touser,omitempty"`  // 可选：覆盖默认的接收人
+	AgentId  string          `json:"agentid,omitempty"` // 可选：覆盖默认的应用ID
+	Text     *Msg            `json:"text,omitempty"`    // 官方格式：文本消息
+	Markdown *Markdown       `json:"markdown,omitempty"` // 官方格式：Markdown消息
 }
 
 type Msg struct {
@@ -311,11 +316,26 @@ func main() {
 			if err == nil {
 				// 成功解析JSON请求体
 				sendkey = requestBody.Sendkey
-				msgContent = requestBody.Msg
 				msgType = requestBody.MsgType
 				toUser = requestBody.ToUser
 				agentId = requestBody.AgentId
-				log.Println("使用body传参（JSON格式）")
+
+				// 优先使用简化格式（向后兼容）
+				if requestBody.Msg != "" {
+					msgContent = requestBody.Msg
+					log.Println("使用body传参（简化格式）")
+				} else {
+					// 使用官方格式（text.content 或 markdown.content）
+					if requestBody.Text != nil && requestBody.Text.Content != "" {
+						msgContent = requestBody.Text.Content
+						log.Println("使用body传参（官方格式 - text）")
+					} else if requestBody.Markdown != nil && requestBody.Markdown.Content != "" {
+						msgContent = requestBody.Markdown.Content
+						log.Println("使用body传参（官方格式 - markdown）")
+					} else {
+						log.Println("警告：未找到消息内容")
+					}
+				}
 			} else {
 				// JSON解析失败，回退到URL参数
 				log.Printf("JSON解析失败: %v，回退到URL参数\n", err)
