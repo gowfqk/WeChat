@@ -25,26 +25,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Debug - Check Secrets
-        run: |
-          echo "Checking Docker Hub credentials..."
-          echo "DOCKER_USERNAME: $DOCKER_USERNAME"
-          echo "DOCKER_USERNAME length: ${#DOCKER_USERNAME}"
-          echo "DOCKER_PASSWORD length: ${#DOCKER_PASSWORD}"
-
-          if [ -z "$DOCKER_USERNAME" ]; then
-            echo "ERROR: DOCKER_USERNAME is empty or not set!"
-            exit 1
-          fi
-          if [ -z "$DOCKER_PASSWORD" ]; then
-            echo "ERROR: DOCKER_PASSWORD is empty or not set!"
-            exit 1
-          fi
-          echo "✓ All credentials are set correctly"
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
-          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
@@ -69,23 +49,12 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Debug - Build context
-        run: |
-          echo "Listing build context files..."
-          ls -la
-          echo ""
-          echo "Checking for binary files..."
-          find . -type f -exec file {} \; | grep -E "(binary|PNG|JPEG|GIF)" || echo "No binary files found"
-          echo ""
-          echo "Checking .dockerignore..."
-          cat .dockerignore 2>/dev/null || echo "No .dockerignore found"
-
       - name: Build and push Docker image
         id: build
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
