@@ -298,11 +298,6 @@ func main() {
 	// 设置日志内容显示文件名和行号
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	wecomChan := func(res http.ResponseWriter, req *http.Request) {
-		log.Println("========== 收到新请求 ==========")
-		log.Printf("请求方法: %s\n", req.Method)
-		log.Printf("请求URL: %s\n", req.URL.String())
-		log.Printf("Content-Type: %s\n", req.Header.Get("Content-Type"))
-
 		// 获取token
 		accessToken := GetAccessToken()
 		// 默认token有效
@@ -317,7 +312,6 @@ func main() {
 		var requestBody RequestBody
 		body, err := ioutil.ReadAll(req.Body)
 		if err == nil && len(body) > 0 {
-			log.Printf("请求体内容: %s\n", string(body))
 			err = json.Unmarshal(body, &requestBody)
 			if err == nil {
 				// 成功解析JSON请求体
@@ -325,15 +319,6 @@ func main() {
 				msgType = requestBody.MsgType
 				toUser = requestBody.ToUser
 				agentId = requestBody.AgentId
-
-				log.Printf("解析结果 - sendkey: '%s', msgType: '%s'\n", sendkey, msgType)
-				log.Printf("requestBody.Msg: '%s'\n", requestBody.Msg)
-				if requestBody.Text != nil {
-					log.Printf("requestBody.Text.Content: '%s'\n", requestBody.Text.Content)
-				}
-				if requestBody.Markdown != nil {
-					log.Printf("requestBody.Markdown.Content: '%s'\n", requestBody.Markdown.Content)
-				}
 
 				// 优先使用简化格式（向后兼容）
 				if requestBody.Msg != "" {
@@ -355,8 +340,6 @@ func main() {
 				// JSON解析失败，回退到URL参数
 				log.Printf("JSON解析失败: %v，回退到URL参数\n", err)
 			}
-		} else {
-			log.Println("请求体为空或读取失败")
 		}
 
 		// 如果body中没有获取到参数，则从URL参数中获取（保持向后兼容）
@@ -369,23 +352,9 @@ func main() {
 			log.Println("使用URL参数传参")
 		}
 
-		log.Printf("最终参数 - sendkey: '%s', msgType: '%s', msgContent: '%s'\n", sendkey, msgType, msgContent)
-		log.Printf("环境变量Sendkey: '%s'\n", Sendkey)
-
 		// 验证sendkey
 		if sendkey != Sendkey {
-			log.Printf("sendkey验证失败 - 期望: '%s', 实际: '%s'\n", Sendkey, sendkey)
-			res.Header().Set("Content-type", "application/json")
-			res.Write([]byte(`{"errcode": 40001, "errmsg": "invalid sendkey"}`))
-			return
-		}
-
-		// 检查msgContent是否为空
-		if msgContent == "" {
-			log.Println("错误：msgContent为空")
-			res.Header().Set("Content-type", "application/json")
-			res.Write([]byte(`{"errcode": 44004, "errmsg": "text content is empty"}`))
-			return
+			log.Panicln("sendkey 错误，请检查")
 		}
 
 		// 设置默认值
@@ -426,26 +395,23 @@ func main() {
 			MsgType:                msgType,
 			DuplicateCheckInterval: 600,
 		}
-		// 根据消息类型设置对应的内容字段
-		if msgType == "markdown" {
-			postData.Markdown = Markdown{
-				Content: msgContent,
+			// 根据消息类型设置对应的内容字段
+			if msgType == "markdown" {
+				postData.Markdown = Markdown{
+					Content: msgContent,
+				}
+			} else {
+				postData.Text = Msg{
+					Content: msgContent,
+				}
 			}
-		} else {
-			postData.Text = Msg{
-				Content: msgContent,
-			}
-		}
 
-		// 如果是图片消息，设置MediaId
-		if msgType == "image" {
-			postData.Image = Pic{
-				MediaId: mediaId,
+			// 如果是图片消息，设置MediaId
+			if msgType == "image" {
+				postData.Image = Pic{
+					MediaId: mediaId,
+				}
 			}
-		}
-
-		log.Printf("准备发送的数据: %+v\n", postData)
-		log.Printf("消息内容长度: %d\n", len(msgContent))
 
 		postStatus := ""
 		for i := 0; i <= 3; i++ {
@@ -465,7 +431,6 @@ func main() {
 
 		res.Header().Set("Content-type", "application/json")
 		_, _ = res.Write([]byte(postStatus))
-		log.Println("========== 请求处理完成 ==========")
 	}
 	http.HandleFunc("/wecomchan", wecomChan)
 	log.Fatal(http.ListenAndServe(":8080", nil))
