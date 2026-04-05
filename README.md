@@ -77,7 +77,35 @@ var RedisPassword = GetEnvDefault("REDIS_PASSWORD", "")
 2. 启动
 `./wecomchan`
 
-## 构建docker镜像使用（推荐，不依赖golang，不依赖网络）
+## 构建docker镜像使用
+
+### 方式1：使用预构建镜像（推荐）
+
+本项目已配置GitHub Actions自动构建Docker镜像并推送到Docker Hub，可直接使用：
+
+```bash
+# 拉取最新版本
+docker pull gowfqk/go-wecomchan:latest
+
+# 拉取指定版本
+docker pull gowfqk/go-wecomchan:v2.3.0
+```
+
+使用预构建镜像：
+
+```bash
+docker run -d -p 8080:8080 \
+  -e SENDKEY=your_sendkey \
+  -e WECOM_CID=your_cid \
+  -e WECOM_SECRET=your_secret \
+  -e WECOM_AID=your_aid \
+  -e CACHE_TYPE=memory \
+  gowfqk/go-wecomchan:latest
+```
+
+### 方式2：本地构建
+
+如果需要自定义构建，可以使用以下命令：
 
 1. 构建镜像
 `docker build -t go-wecomchan .`
@@ -271,7 +299,23 @@ curl -X POST 'http://localhost:8080/wecomchan?sendkey={你的sendkey}&msg_type=i
 - [x] 支持多种消息类型（文本、Markdown、图片）
 - [x] 支持Body JSON传参方式
 - [x] 支持自定义接收人和应用ID
-- [x] 支持多架构Docker镜像构建
+- [x] 支持多架构Docker镜像构建（amd64, arm64）
+- [x] 支持多种缓存方式（不缓存、内存、Redis）
+- [x] GitHub Actions自动构建和推送Docker镜像
+- [x] 预构建Docker Hub镜像（gowfqk/go-wecomchan）
+
+## CI/CD
+
+本项目使用GitHub Actions进行自动化构建和部署：
+
+- ✅ 自动构建Docker镜像（amd64, arm64）
+- ✅ 自动推送到Docker Hub
+- ✅ 支持版本标签管理
+- ✅ 构建缓存优化
+
+详细配置说明：[DOCKER_CI.md](DOCKER_CI.md)
+
+Docker Hub镜像地址：https://hub.docker.com/r/gowfqk/go-wecomchan
 
 ## 鸣谢
 
