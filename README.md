@@ -1,6 +1,6 @@
 # go-wecomchan
 
-通过企业微信向微信推送消息的Go版本解决方案。
+通过企业微信向微信推送消息的Go语言解决方案。
 
 ## 功能特性
 
@@ -71,23 +71,18 @@ var RedisPassword = GetEnvDefault("REDIS_PASSWORD", "")
 
 ## 构建docker镜像使用（推荐，不依赖golang，不依赖网络）
 
-新增打包好的镜像可以直接使用
-
-- 推送文本or图片:`docker pull aozakiaoko/go-wecomchan`  
-Docker Hub 地址为:[https://hub.docker.com/r/aozakiaoko/go-wecomchan](https://hub.docker.com/r/aozakiaoko/go-wecomchan)  
-
-已经更新latest镜像为 @fcbhank 的最新代码，并支持arm64设备。也可通过aozakiaoko/go-wecomchan:v2 获取最新镜像。
-
-- v2_推送文本or图片:`docker pull fcbhank/go-wecomchan`
-Docker Hub 地址为:[https://hub.docker.com/r/fcbhank/go-wecomchan](https://hub.docker.com/r/fcbhank/go-wecomchan)
-
 1. 构建镜像
 `docker build -t go-wecomchan .`
 
-2. 修改默认值后启动镜像
+2. 构建多架构镜像
+```bash
+docker buildx build --platform linux/amd64,linux/arm64 -t go-wecomchan:latest .
+```
+
+3. 修改默认值后启动镜像
 `docker run -dit -p 8080:8080 go-wecomchan`
 
-3. 通过环境变量启动镜像并启用redis
+4. 通过环境变量启动镜像并启用redis
 
 ```bash
 docker run -dit -e SENDKEY=set_a_sendkey \
@@ -98,14 +93,12 @@ docker run -dit -e SENDKEY=set_a_sendkey \
 -e REDIS_STAT=ON \
 -e REDIS_ADDR="localhost:6379" \
 -e REDIS_PASSWORD="" \
-# aozakiaoko/go-wecomchan 已经更新镜像为 @fcbhank 的最新代码，并支持arm64设备。
-# v2 fcbhank/go-wecomchan
 -p 8080:8080 go-wecomchan
 ```
 
 如不使用redis不要传入最后三个关于redis的环境变量(REDIS_STAT|REDIS_ADDR|REDIS_PASSWORD)
 
-4. 环境变量说明
+5. 环境变量说明
 
 |名称|描述|
 |---|---|
@@ -125,25 +118,70 @@ docker run -dit -e SENDKEY=set_a_sendkey \
 `docker-compose up -d`
 
 ## 调用方式
-- v1_推送文本
-访问 `http://localhost:8080/wecomchan?sendkey=你配置的sendkey&&msg=需要发送的消息&&msg_type=text`
 
-- v2_推送文本or图片
+### 方式1：Body JSON传参（推荐）
 
 ```bash
 # 推送文本消息
-curl --location --request GET 'http://localhost:8080/wecomchan?sendkey={你的sendkey}&msg={你的文本消息}&msg_type=text'
+curl -X POST http://localhost:8080/wecomchan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sendkey": "your_sendkey",
+    "msg": "这是一条测试消息",
+    "msg_type": "text"
+  }'
+
+# 推送Markdown消息
+curl -X POST http://localhost:8080/wecomchan \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sendkey": "your_sendkey",
+    "msg": "# 通知\n\n**内容**: 系统将于今晚维护",
+    "msg_type": "markdown"
+  }'
+
+# 推送图片消息（使用multipart/form-data）
+curl -X POST http://localhost:8080/wecomchan \
+  -F "sendkey=your_sendkey" \
+  -F "msg_type=image" \
+  -F "media=@test.jpg"
+```
+
+### 方式2：URL参数传参（向后兼容）
+
+```bash
+# 推送文本消息
+curl -X GET "http://localhost:8080/wecomchan?sendkey={你的sendkey}&msg={你的文本消息}&msg_type=text"
+
+# 推送Markdown消息
+curl -X GET "http://localhost:8080/wecomchan?sendkey={你的sendkey}&msg={markdown内容}&msg_type=markdown"
 
 # 推送图片消息
-curl --location --request POST 'http://localhost:8080/wecomchan?sendkey={你的sendkey}&msg_type=image' \
+curl -X POST 'http://localhost:8080/wecomchan?sendkey={你的sendkey}&msg_type=image' \
 --form 'media=@"test.jpg"'
 ```
 
-## 后续预计添加
+### 参数说明
 
-* [x] Dockerfile 打包镜像(不依赖网络环境)
-* [x] 通过环境变量传递企业微信id，secret等，镜像一次构建多次使用
-* [x] docker-compose redis + go-wecomchan 一键部署
+| 参数名 | 类型 | 必填 | 说明 |
+|--------|------|------|------|
+| sendkey | string | 是 | 验证密钥，与环境变量SENDKEY保持一致 |
+| msg | string | 是 | 消息内容 |
+| msg_type | string | 否 | 消息类型，默认为"text"，可选值：text、markdown、image |
+| touser | string | 否 | 接收人，默认为环境变量WECOM_TOUID的值 |
+| agentid | string | 否 | 应用ID，默认为环境变量WECOM_AID的值 |
+
+详细使用说明请查看：[BODY_PARAM_USAGE.md](BODY_PARAM_USAGE.md)
+
+## 已完成功能
+
+- [x] Dockerfile 打包镜像(不依赖网络环境)
+- [x] 通过环境变量传递企业微信id，secret等，镜像一次构建多次使用
+- [x] docker-compose redis + go-wecomchan 一键部署
+- [x] 支持多种消息类型（文本、Markdown、图片）
+- [x] 支持Body JSON传参方式
+- [x] 支持自定义接收人和应用ID
+- [x] 支持多架构Docker镜像构建
 
 ## 鸣谢
 
