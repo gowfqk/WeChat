@@ -96,7 +96,21 @@ docker run -dit -e SENDKEY=set_a_sendkey \
 -p 8080:8080 go-wecomchan
 ```
 
-如不使用redis不要传入最后三个关于redis的环境变量(REDIS_STAT|REDIS_ADDR|REDIS_PASSWORD)
+**可选：启用Redis缓存**
+
+如果需要启用Redis缓存access_token，可以添加以下环境变量：
+
+```bash
+docker run -dit -e SENDKEY=set_a_sendkey \
+-e WECOM_CID=企业微信公司ID \
+-e WECOM_SECRET=企业微信应用Secret \
+-e WECOM_AID=企业微信应用ID \
+-e WECOM_TOUID="@all" \
+-e REDIS_STAT=ON \
+-e REDIS_ADDR="redis-server:6379" \
+-e REDIS_PASSWORD="your_redis_password" \
+-p 8080:8080 go-wecomchan
+```
 
 5. 环境变量说明
 
@@ -107,15 +121,16 @@ docker run -dit -e SENDKEY=set_a_sendkey \
 |WECOM_SECRET|企业微信应用Secret|
 |WECOM_AID|企业微信应用ID|
 |WECOM_TOUID|需要发送给的人，详见[企业微信官方文档](https://work.weixin.qq.com/api/doc/90000/90135/90236#%E6%96%87%E6%9C%AC%E6%B6%88%E6%81%AF)|
-|REDIS_STAT|是否启用redis换缓存token,ON-启用 OFF或空-不启用|
-|REDIS_ADDR|redis服务器地址，如不启用redis缓存可不设置|
-|REDIS_PASSWORD|redis的连接密码，如不启用redis缓存可不设置|
 
 ## 使用docker-compose 部署
 
-修改docker-compose.yml 文件内上述的环境变量，之后执行
+修改docker-compose.yml 文件内的环境变量，之后执行：
 
-`docker-compose up -d`
+```bash
+docker-compose up -d
+```
+
+注意：docker-compose.yml已简化，不再包含Redis服务。如需启用Redis缓存access_token，请单独部署Redis并设置环境变量REDIS_STAT=ON、REDIS_ADDR、REDIS_PASSWORD。
 
 ## 调用方式
 
@@ -177,7 +192,7 @@ curl -X POST 'http://localhost:8080/wecomchan?sendkey={你的sendkey}&msg_type=i
 
 - [x] Dockerfile 打包镜像(不依赖网络环境)
 - [x] 通过环境变量传递企业微信id，secret等，镜像一次构建多次使用
-- [x] docker-compose redis + go-wecomchan 一键部署
+- [x] docker-compose 快速部署
 - [x] 支持多种消息类型（文本、Markdown、图片）
 - [x] 支持Body JSON传参方式
 - [x] 支持自定义接收人和应用ID
