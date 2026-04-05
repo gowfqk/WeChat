@@ -1,0 +1,32 @@
+# Build binaries
+wecomchan
+wecomchan.exe
+
+# Git
+.git
+.gitignore
+.github
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+*.patch
+
+# OS files
+.DS_Store
+.idea
+
+# Editor files
+.vscode
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
+
+# Docker files (don't include in context)
+docker-compose.yml
+Dockerfile.architecture
