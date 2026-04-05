@@ -144,3 +144,26 @@ curl --location --request POST 'http://localhost:8080/wecomchan?sendkey={你的s
 * [x] Dockerfile 打包镜像(不依赖网络环境)
 * [x] 通过环境变量传递企业微信id，secret等，镜像一次构建多次使用
 * [x] docker-compose redis + go-wecomchan 一键部署
+
+## 鸣谢
+
+本项目基于 [easychen/wecomchan](https://github.com/easychen/wecomchan) 项目进行开发和改进。
+
+原项目 [easychen/wecomchan](https://github.com/easychen/wecomchan) 是一个开源的企业微信消息推送解决方案，提供了多语言实现（PHP、Go、Python等）和多种云平台部署方案。
+
+感谢原项目作者 easychen 的开源贡献！
+
+### 原项目地址
+
+- GitHub: https://github.com/easychen/wecomchan
+- 许可证: MIT
+
+### 本项目改进
+
+在原项目基础上，本项目进行了以下改进：
+
+- ✅ 新增Markdown消息类型支持
+- ✅ 新增Body JSON传参方式
+- ✅ 简化项目结构，专注于Go版本
+- ✅ 更新和完善文档
+- ✅ 优化代码结构
