@@ -41,19 +41,32 @@ var UploadMediaApi = "https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_to
 
 const RedisTokenKey = "access_token"
 
+// RequestBody 请求体结构体（支持JSON传参）
+type RequestBody struct {
+	Sendkey  string `json:"sendkey"`
+	Msg      string `json:"msg"`
+	MsgType  string `json:"msg_type"`
+	ToUser   string `json:"touser,omitempty"`  // 可选：覆盖默认的接收人
+	AgentId  string `json:"agentid,omitempty"` // 可选：覆盖默认的应用ID
+}
+
 type Msg struct {
 	Content string `json:"content"`
 }
 type Pic struct {
 	MediaId string `json:"media_id"`
 }
+type Markdown struct {
+	Content string `json:"content"`
+}
 type JsonData struct {
 	ToUser                 string `json:"touser"`
 	AgentId                string `json:"agentid"`
 	MsgType                string `json:"msgtype"`
 	DuplicateCheckInterval int    `json:"duplicate_check_interval"`
-	Text                   Msg    `json:"text"`
-	Image                  Pic    `json:"image"`
+	Text                   Msg      `json:"text"`
+	Image                  Pic      `json:"image"`
+	Markdown               Markdown `json:"markdown"`
 }
 
 // GetEnvDefault 获取配置信息，未获取到则取默认值
@@ -243,12 +256,55 @@ func main() {
 		tokenValid := true
 
 		_ = req.ParseForm()
-		sendkey := req.FormValue("sendkey")
+
+		// 定义变量用于存储参数
+		var sendkey, msgContent, msgType, toUser, agentId string
+
+		// 尝试从请求体（body）中解析JSON参数
+		var requestBody RequestBody
+		body, err := ioutil.ReadAll(req.Body)
+		if err == nil && len(body) > 0 {
+			err = json.Unmarshal(body, &requestBody)
+			if err == nil {
+				// 成功解析JSON请求体
+				sendkey = requestBody.Sendkey
+				msgContent = requestBody.Msg
+				msgType = requestBody.MsgType
+				toUser = requestBody.ToUser
+				agentId = requestBody.AgentId
+				log.Println("使用body传参（JSON格式）")
+			} else {
+				// JSON解析失败，回退到URL参数
+				log.Printf("JSON解析失败: %v，回退到URL参数\n", err)
+			}
+		}
+
+		// 如果body中没有获取到参数，则从URL参数中获取（保持向后兼容）
+		if sendkey == "" {
+			sendkey = req.FormValue("sendkey")
+			msgContent = req.FormValue("msg")
+			msgType = req.FormValue("msg_type")
+			toUser = req.FormValue("touser")
+			agentId = req.FormValue("agentid")
+			log.Println("使用URL参数传参")
+		}
+
+		// 验证sendkey
 		if sendkey != Sendkey {
 			log.Panicln("sendkey 错误，请检查")
 		}
-		msgContent := req.FormValue("msg")
-		msgType := req.FormValue("msg_type")
+
+		// 设置默认值
+		if msgType == "" {
+			msgType = "text"
+		}
+		if toUser == "" {
+			toUser = WecomToUid
+		}
+		if agentId == "" {
+			agentId = WecomAid
+		}
+
 		log.Println("mes_type=", msgType)
 		// 默认mediaId为空
 		mediaId := ""
@@ -270,13 +326,29 @@ func main() {
 		}
 
 		// 准备发送应用消息所需参数
-		postData := InitJsonData(msgType)
-		postData.Text = Msg{
-			Content: msgContent,
+		postData := JsonData{
+			ToUser:                 toUser,
+			AgentId:                agentId,
+			MsgType:                msgType,
+			DuplicateCheckInterval: 600,
 		}
-		postData.Image = Pic{
-			MediaId: mediaId,
-		}
+			// 根据消息类型设置对应的内容字段
+			if msgType == "markdown" {
+				postData.Markdown = Markdown{
+					Content: msgContent,
+				}
+			} else {
+				postData.Text = Msg{
+					Content: msgContent,
+				}
+			}
+
+			// 如果是图片消息，设置MediaId
+			if msgType == "image" {
+				postData.Image = Pic{
+					MediaId: mediaId,
+				}
+			}
 
 		postStatus := ""
 		for i := 0; i <= 3; i++ {
