@@ -9,13 +9,13 @@ services:
     # build: .
 
     environment:
-      - SENDKEY=发送时用来验证的key
-      - WECOM_CID=企业微信公司ID
-      - WECOM_SECRET=企业微信应用Secret
-      - WECOM_AID=企业微信应用ID
+      - SENDKEY=204800
+      - WECOM_CID=ww0a5b8d4134eff2f9
+      - WECOM_SECRET=3AoCldfNpZfRLDCxV-m6QLZfQWohx0PA_ei6egSKCx0
+      - WECOM_AID=1000003
       - WECOM_TOUID=@all
       # 缓存类型: none(不缓存), memory(内存缓存), redis(Redis缓存)
       - CACHE_TYPE=memory
     ports:
-      - 8080:8080
+      - 3000:8080
     restart: unless-stopped

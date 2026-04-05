@@ -49,6 +49,7 @@ var cacheMutex sync.RWMutex
 
 var GetTokenApi = "https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=%s&corpsecret=%s"
 var SendMessageApi = "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=%s"
+var ExternalSendMessageApi = "https://qyapi.weixin.qq.com/cgi-bin/externalcontact/message/send?access_token=%s"
 var UploadMediaApi = "https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token=%s&type=%s"
 
 /*-------------------------------  企业微信服务端API end  -------------------------------*/
@@ -87,6 +88,51 @@ type JsonData struct {
 	Image                  Pic      `json:"image"`
 	Markdown               Markdown `json:"markdown"`
 }
+
+/*-------------------------------  外部联系人消息结构体 begin  -------------------------------*/
+
+// ExternalRequestBody 外部联系人消息请求体
+type ExternalRequestBody struct {
+	Sendkey         string      `json:"sendkey"`
+	ExternalUserIds []string    `json:"external_userid"` // 外部联系人userid列表
+	Sender          string      `json:"sender"`          // 发送企业成员的userid
+	MsgType         string      `json:"msgtype"`         // 消息类型
+	Text            *Msg        `json:"text,omitempty"`   // 文本消息
+	Image           *Pic        `json:"image,omitempty"`  // 图片消息
+	Markdown        *Markdown   `json:"markdown,omitempty"` // Markdown消息
+	Link            *LinkMsg    `json:"link,omitempty"`   // 链接消息
+	MiniProgram     *MiniProgramMsg `json:"miniprogram,omitempty"` // 小程序消息
+}
+
+// LinkMsg 链接消息
+type LinkMsg struct {
+	Title       string `json:"title"`
+	Description string `json:"desc"`
+	Url         string `json:"url"`
+	ThumbMediaId string `json:"thumb_media_id"`
+}
+
+// MiniProgramMsg 小程序消息
+type MiniProgramMsg struct {
+	Title        string `json:"title"`
+	AppId        string `json:"appid"`
+	PagePath     string `json:"pagepath"`
+	ThumbMediaId string `json:"thumb_media_id"`
+}
+
+// ExternalMessageData 外部联系人消息数据
+type ExternalMessageData struct {
+	ExternalUserIds []string          `json:"external_userid"`
+	Sender          string            `json:"sender"`
+	MsgType         string            `json:"msgtype"`
+	Text            Msg               `json:"text,omitempty"`
+	Image           Pic               `json:"image,omitempty"`
+	Markdown        Markdown          `json:"markdown,omitempty"`
+	Link            LinkMsg           `json:"link,omitempty"`
+	MiniProgram     MiniProgramMsg    `json:"miniprogram,omitempty"`
+}
+
+/*-------------------------------  外部联系人消息结构体 end  -------------------------------*/
 
 // GetEnvDefault 获取配置信息，未获取到则取默认值
 func GetEnvDefault(key, defVal string) string {
@@ -293,6 +339,143 @@ func InitJsonData(msgType string) JsonData {
 	}
 }
 
+// SendExternalMessage 发送外部联系人消息
+func SendExternalMessage(accessToken string, postData ExternalMessageData) string {
+	postJson, _ := json.Marshal(postData)
+	log.Println("发送外部联系人消息 postJson ", string(postJson))
+
+	sendMessageUrl := fmt.Sprintf(ExternalSendMessageApi, accessToken)
+	log.Println("发送外部联系人消息 URL ", sendMessageUrl)
+
+	msgReq, err := http.NewRequest("POST", sendMessageUrl, bytes.NewBuffer(postJson))
+	if err != nil {
+		log.Println("创建请求失败:", err)
+	}
+	msgReq.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(msgReq)
+	if err != nil {
+		log.Fatalln("发送外部联系人消息失败==>", err)
+	}
+	defer resp.Body.Close()
+
+	body, _ := ioutil.ReadAll(resp.Body)
+	respData := ParseJson(string(body))
+	log.Println("发送外部联系人消息接口返回==>", respData)
+
+	return string(body)
+}
+
+// externalContactHandler 外部联系人消息处理器
+func externalContactHandler(res http.ResponseWriter, req *http.Request) {
+	log.Println("========== 收到外部联系人消息请求 ==========")
+	log.Printf("请求方法: %s\n", req.Method)
+	log.Printf("请求URL: %s\n", req.URL.String())
+	log.Printf("Content-Type: %s\n", req.Header.Get("Content-Type"))
+
+	// 获取token
+	accessToken := GetAccessToken()
+
+	_ = req.ParseForm()
+
+	// 读取请求体
+	body, err := ioutil.ReadAll(req.Body)
+	if err != nil {
+		log.Println("读取请求体失败:", err)
+		res.Header().Set("Content-type", "application/json")
+		res.Write([]byte(`{"errcode": 40001, "errmsg": "invalid request body"}`))
+		return
+	}
+
+	log.Printf("请求体内容: %s\n", string(body))
+
+	// 解析请求体
+	var requestBody ExternalRequestBody
+	err = json.Unmarshal(body, &requestBody)
+	if err != nil {
+		log.Printf("JSON解析失败: %v\n", err)
+		res.Header().Set("Content-type", "application/json")
+		res.Write([]byte(`{"errcode": 40002, "errmsg": "invalid json format"}`))
+		return
+	}
+
+	log.Printf("解析结果 - sendkey: '%s', sender: '%s', msgType: '%s'\n", requestBody.Sendkey, requestBody.Sender, requestBody.MsgType)
+	log.Printf("外部联系人数量: %d\n", len(requestBody.ExternalUserIds))
+
+	// 验证sendkey
+	if requestBody.Sendkey != Sendkey {
+		log.Printf("sendkey验证失败 - 期望: '%s', 实际: '%s'\n", Sendkey, requestBody.Sendkey)
+		res.Header().Set("Content-type", "application/json")
+		res.Write([]byte(`{"errcode": 40001, "errmsg": "invalid sendkey"}`))
+		return
+	}
+
+	// 验证必需字段
+	if len(requestBody.ExternalUserIds) == 0 {
+		log.Println("错误：external_userid为空")
+		res.Header().Set("Content-type", "application/json")
+		res.Write([]byte(`{"errcode": 40003, "errmsg": "external_userid is required"}`))
+		return
+	}
+
+	if requestBody.Sender == "" {
+		log.Println("错误：sender为空")
+		res.Header().Set("Content-type", "application/json")
+		res.Write([]byte(`{"errcode": 40004, "errmsg": "sender is required"}`))
+		return
+	}
+
+	if requestBody.MsgType == "" {
+		requestBody.MsgType = "text"
+	}
+
+	// 准备发送数据
+	postData := ExternalMessageData{
+		ExternalUserIds: requestBody.ExternalUserIds,
+		Sender:          requestBody.Sender,
+		MsgType:         requestBody.MsgType,
+	}
+
+	// 根据消息类型设置对应的内容字段
+	switch requestBody.MsgType {
+	case "text":
+		if requestBody.Text != nil {
+			postData.Text = *requestBody.Text
+			log.Printf("文本消息内容长度: %d\n", len(requestBody.Text.Content))
+		}
+	case "image":
+		if requestBody.Image != nil {
+			postData.Image = *requestBody.Image
+			log.Printf("图片消息media_id: %s\n", requestBody.Image.MediaId)
+		}
+	case "markdown":
+		if requestBody.Markdown != nil {
+			postData.Markdown = *requestBody.Markdown
+			log.Printf("Markdown消息内容长度: %d\n", len(requestBody.Markdown.Content))
+		}
+	case "link":
+		if requestBody.Link != nil {
+			postData.Link = *requestBody.Link
+			log.Printf("链接消息标题: %s\n", requestBody.Link.Title)
+		}
+	case "miniprogram":
+		if requestBody.MiniProgram != nil {
+			postData.MiniProgram = *requestBody.MiniProgram
+			log.Printf("小程序消息标题: %s\n", requestBody.MiniProgram.Title)
+		}
+	}
+
+	log.Printf("准备发送的外部联系人数据: %+v\n", postData)
+
+	// 发送消息
+	response := SendExternalMessage(accessToken, postData)
+
+	res.Header().Set("Content-type", "application/json")
+	res.Write([]byte(response))
+	log.Println("========== 外部联系人消息请求处理完成 ==========")
+}
+
 // 主函数入口
 func main() {
 	// 设置日志内容显示文件名和行号
@@ -468,5 +651,6 @@ func main() {
 		log.Println("========== 请求处理完成 ==========")
 	}
 	http.HandleFunc("/wecomchan", wecomChan)
+	http.HandleFunc("/external", externalContactHandler)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
