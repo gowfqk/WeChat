@@ -69,12 +69,23 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Debug - Build context
+        run: |
+          echo "Listing build context files..."
+          ls -la
+          echo ""
+          echo "Checking for binary files..."
+          find . -type f -exec file {} \; | grep -E "(binary|PNG|JPEG|GIF)" || echo "No binary files found"
+          echo ""
+          echo "Checking .dockerignore..."
+          cat .dockerignore 2>/dev/null || echo "No .dockerignore found"
+
       - name: Build and push Docker image
         id: build
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
