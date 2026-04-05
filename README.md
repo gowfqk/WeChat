@@ -1,340 +1,146 @@
-# Wecom酱
+# go-wecomchan
 
-通过企业微信向微信推送消息的解决方案。包括：
+通过企业微信向微信推送消息的Go版本解决方案。
 
-1. 配置说明（本页下方）
-2. 推送函数（支持多种语言，见本页下方）
-3. 自行搭建的在线服务源码 
-   1. [PHP版搭建说明](ONLINE.md) 
-   2. [Go版说明](go-wecomchan/README.md)
-   3. [Go适配华为函数工作流版本](https://github.com/Colo-Thor/wecomchan/releases/tag/2.2)
-   4. [腾讯云云函数搭建说明](go-scf/) ⚠️ 2022年5月起的最低月消费[已经取消了](https://cloud.tencent.com/document/product/583/104909)
-   5. [阿里云云函数搭建说明](python-aliyunfc/) 
-   6. [百度智能云函数搭建说明](python-baiduCFC/)
-   7. [Python版华为函数工作流搭建说明](python-huaweiFG/)
+## 功能特性
 
-## 🎈 本项目属于方糖推送生态。该生态包含项目如下：
+- ✅ 支持多种消息类型：文本（text）、Markdown（markdown）、图片（image）
+- ✅ 支持多种传参方式：Body JSON传参、URL参数传参
+- ✅ 支持自定义接收人和应用ID
+- ✅ 支持Redis缓存access_token
+- ✅ 支持Docker部署
+- ✅ 支持多架构构建（amd64、arm64）
 
-- [Server酱Turbo](https://sct.ftqq.com)：支持企业微信、微信服务号、钉钉、飞书群机器人等多通道的在线服务，无需搭建直接使用，每天有免费额度
-- [Wecom酱](https://github.com/easychen/wecomchan)：通过企业微信推送消息到微信的消息推送函数和在线服务方案，开源免费，可自己搭建。支持多语言。
-- [PushDeer](https://github.com/easychen/pushdeer)：可自行搭建的、无需安装APP的开源推送方案。同时也提供安装APP的降级方案给低版本/没有快应用的系统。支持作为Server酱的通道进行推送，所有支持Server酱的软件和插件都能直接整合PushDeer。
+## What's New
 
-## 企业微信应用消息配置说明
+### v2.2.0 - 最新更新
 
-优点：
+- ✅ **新增Markdown消息类型支持**
+  - 支持企业微信markdown格式消息
+  - 支持标题、加粗、颜色、链接、引用、代码等语法
+  - 查看完整指南：[MARKDOWN_GUIDE.md](MARKDOWN_GUIDE.md)
 
-1. 一次配置，持续使用
-1. 配置好以后，只需要微信就能收消息，不再需要安装企业微信客户端
+- ✅ **新增Body传参方式**
+  - 支持JSON格式的请求体传参
+  - 完全向后兼容URL参数方式
+  - 查看使用说明：[BODY_PARAM_USAGE.md](BODY_PARAM_USAGE.md)
 
-PS：消息接口无需认证即可使用，个人用微信就可以注册
+### v2.1.0
 
-### 具体操作
+- 添加 Dockerfile.architecture 使用docker buildx支持构建多架构镜像。
 
-#### 第一步，注册企业
+关于docker buildx build 使用方式参考官方文档:
 
-用电脑打开[企业微信官网](https://work.weixin.qq.com/)，注册一个企业
+[https://docs.docker.com/engine/reference/commandline/buildx_build/](https://docs.docker.com/engine/reference/commandline/buildx_build/)
 
-#### 第二步，创建应用
+## 配置说明
 
-注册成功后，点「管理企业」进入管理界面，选择「应用管理」 → 「自建」 →  「创建应用」
+直接使用和构建二进制文件使用需要golang环境，并且网络可以安装依赖。  
+docker构建镜像使用，需要安装docker，不依赖golang以及网络。  
 
-![](https://theseven.ftqq.com/20210208143228.png)
+## 修改默认值
 
-应用名称填入「Server酱」，应用logo到[这里](./20210208142819.png)下载，可见范围选择公司名。
+修改的sendkey，企业微信公司ID 等默认值为你的企业中的相关信息，如不设置运行时和打包后都可通过环境变量传入。
 
-
-![](https://theseven.ftqq.com/20210208143327.png)
-
-创建完成后进入应用详情页，可以得到应用ID( `agentid` )①，应用Secret( `secret` )②。
-
-注意：`secret`推送到手机端时，只能在`企业微信客户端`中查看。
-
-#### 第三步，添加可信IP
-
-> 2022年6月20日之后创建的应用，需要额外配置可信IP。
-
-在「应用详情页」的最下方，开发者接口分类中，找到「企业可信IP」，点击「配置」，并填入服务器IP即可。
-
-注意，如果你使用云函数等公用IP的云服务，可能需要在（云函数或其他服务的）设置界面中打开「固定公网IP」来获得一个独立的IP。否则有可能报「第三方服务IP」错误。
-
-#### 第四步，获取企业ID
-
-进入「[我的企业](https://work.weixin.qq.com/wework_admin/frame#profile)」页面，拉到最下边，可以看到企业ID③，复制并填到上方。
-
-推送UID直接填 `@all` ，推送给公司全员。
-
-#### 第五步，推送消息到微信
-
-进入「我的企业」 → 「[微信插件](https://work.weixin.qq.com/wework_admin/frame#profile/wxPlugin)」，拉到下边扫描二维码，关注以后即可收到推送的消息。
-
-![](https://theseven.ftqq.com/20210208144808.png)
-
-PS：如果出现`接口请求正常，企业微信接受消息正常，个人微信无法收到消息`的情况：
-
-1. 进入「我的企业」 → 「[微信插件](https://work.weixin.qq.com/wework_admin/frame#profile/wxPlugin)」，拉到最下方，勾选 “允许成员在微信插件中接收和回复聊天消息”
-![](https://img.ams1.imgbed.xyz/2021/06/01/HPIRU.jpg)
-
-2. 在企业微信客户端 「我」 → 「设置」  → 「新消息通知」中关闭 “仅在企业微信中接受消息” 限制条件
-![](https://img.ams1.imgbed.xyz/2021/06/01/HPKPX.jpg)
-
-#### 第六步，通过以下函数发送消息：
-
-PS：为使用方便，以下函数没有对 `access_token` 进行缓存。对于个人低频调用已经够用。带缓存的实现可查看 `index.php` 中的示例代码（依赖Redis实现）。
-
-PHP版：
-
-```php
-function send_to_wecom($text, $wecom_cid, $wecom_aid, $wecom_secret,  $wecom_touid = '@all')
-{
-    $info = @json_decode(file_get_contents("https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=".urlencode($wecom_cid)."&corpsecret=".urlencode($wecom_secret)), true);
-                
-    if ($info && isset($info['access_token']) && strlen($info['access_token']) > 0) {
-        $access_token = $info['access_token'];
-        $url = 'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token='.urlencode($access_token);
-        $data = new \stdClass();
-        $data->touser = $wecom_touid;
-        $data->agentid = $wecom_aid;
-        $data->msgtype = "text";
-        $data->text = ["content"=> $text];
-        $data->duplicate_check_interval = 600;
-
-        $data_json = json_encode($data);
-        $ch = curl_init();
-        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/json']);
-        curl_setopt($ch, CURLOPT_URL, $url);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        @curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 5);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $data_json);
-
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        
-        $response = curl_exec($ch);
-        return $response;
-    }
-    return false;
-}
-
+```golang
+var Sendkey = GetEnvDefault("SENDKEY", "set_a_sendkey")
+var WecomCid = GetEnvDefault("WECOM_CID", "企业微信公司ID")
+var WecomSecret = GetEnvDefault("WECOM_SECRET", "企业微信应用Secret")
+var WecomAid = GetEnvDefault("WECOM_AID", "企业微信应用ID")
+var WecomToUid = GetEnvDefault("WECOM_TOUID", "@all")
+var RedisStat = GetEnvDefault("REDIS_STAT", "OFF")
+var RedisAddr = GetEnvDefault("REDIS_ADDR", "localhost:6379")
+var RedisPassword = GetEnvDefault("REDIS_PASSWORD", "")
 ```
 
-使用实例：
+## 直接使用
 
-```php
-$ret = send_to_wecom("推送测试\r\n测试换行", "企业ID③", "应用ID①", "应用secret②");
-print_r( $ret );
+如果没有添加默认值，需要先引入环境变量，以SENDKEY为例：
+
+`export SENDKEY=set_a_sendkey`
+依次引入环境变量后，执行
+`go run .`
+
+## build命令构建二进制文件使用
+
+1. 构建命令
+`go build`
+
+2. 启动
+`./wecomchan`
+
+## 构建docker镜像使用（推荐，不依赖golang，不依赖网络）
+
+新增打包好的镜像可以直接使用
+
+- 推送文本or图片:`docker pull aozakiaoko/go-wecomchan`  
+Docker Hub 地址为:[https://hub.docker.com/r/aozakiaoko/go-wecomchan](https://hub.docker.com/r/aozakiaoko/go-wecomchan)  
+
+已经更新latest镜像为 @fcbhank 的最新代码，并支持arm64设备。也可通过aozakiaoko/go-wecomchan:v2 获取最新镜像。
+
+- v2_推送文本or图片:`docker pull fcbhank/go-wecomchan`
+Docker Hub 地址为:[https://hub.docker.com/r/fcbhank/go-wecomchan](https://hub.docker.com/r/fcbhank/go-wecomchan)
+
+1. 构建镜像
+`docker build -t go-wecomchan .`
+
+2. 修改默认值后启动镜像
+`docker run -dit -p 8080:8080 go-wecomchan`
+
+3. 通过环境变量启动镜像并启用redis
+
+```bash
+docker run -dit -e SENDKEY=set_a_sendkey \
+-e WECOM_CID=企业微信公司ID \
+-e WECOM_SECRET=企业微信应用Secret \
+-e WECOM_AID=企业微信应用ID \
+-e WECOM_TOUID="@all" \
+-e REDIS_STAT=ON \
+-e REDIS_ADDR="localhost:6379" \
+-e REDIS_PASSWORD="" \
+# aozakiaoko/go-wecomchan 已经更新镜像为 @fcbhank 的最新代码，并支持arm64设备。
+# v2 fcbhank/go-wecomchan
+-p 8080:8080 go-wecomchan
 ```
 
-PYTHON版:
+如不使用redis不要传入最后三个关于redis的环境变量(REDIS_STAT|REDIS_ADDR|REDIS_PASSWORD)
 
-```python
-import json,requests,base64
-def send_to_wecom(text,wecom_cid,wecom_aid,wecom_secret,wecom_touid='@all'):
-    get_token_url = f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={wecom_cid}&corpsecret={wecom_secret}"
-    response = requests.get(get_token_url).content
-    access_token = json.loads(response).get('access_token')
-    if access_token and len(access_token) > 0:
-        send_msg_url = f'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}'
-        data = {
-            "touser":wecom_touid,
-            "agentid":wecom_aid,
-            "msgtype":"text",
-            "text":{
-                "content":text
-            },
-            "duplicate_check_interval":600
-        }
-        response = requests.post(send_msg_url,data=json.dumps(data)).content
-        return response
-    else:
-        return False
+4. 环境变量说明
 
-def send_to_wecom_image(base64_content,wecom_cid,wecom_aid,wecom_secret,wecom_touid='@all'):
-    get_token_url = f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={wecom_cid}&corpsecret={wecom_secret}"
-    response = requests.get(get_token_url).content
-    access_token = json.loads(response).get('access_token')
-    if access_token and len(access_token) > 0:
-        upload_url = f'https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token={access_token}&type=image'
-        upload_response = requests.post(upload_url, files={
-            "picture": base64.b64decode(base64_content)
-        }).json()
-        if "media_id" in upload_response:
-            media_id = upload_response['media_id']
-        else:
-            return False
+|名称|描述|
+|---|---|
+|SENDKEY|发送时用来验证的key|
+|WECOM_CID|企业微信公司ID|
+|WECOM_SECRET|企业微信应用Secret|
+|WECOM_AID|企业微信应用ID|
+|WECOM_TOUID|需要发送给的人，详见[企业微信官方文档](https://work.weixin.qq.com/api/doc/90000/90135/90236#%E6%96%87%E6%9C%AC%E6%B6%88%E6%81%AF)|
+|REDIS_STAT|是否启用redis换缓存token,ON-启用 OFF或空-不启用|
+|REDIS_ADDR|redis服务器地址，如不启用redis缓存可不设置|
+|REDIS_PASSWORD|redis的连接密码，如不启用redis缓存可不设置|
 
-        send_msg_url = f'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}'
-        data = {
-            "touser":wecom_touid,
-            "agentid":wecom_aid,
-            "msgtype":"image",
-            "image":{
-                "media_id": media_id
-            },
-            "duplicate_check_interval":600
-        }
-        response = requests.post(send_msg_url,data=json.dumps(data)).content
-        return response
-    else:
-        return False
+## 使用docker-compose 部署
 
-def send_to_wecom_markdown(text,wecom_cid,wecom_aid,wecom_secret,wecom_touid='@all'):
-    get_token_url = f"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={wecom_cid}&corpsecret={wecom_secret}"
-    response = requests.get(get_token_url).content
-    access_token = json.loads(response).get('access_token')
-    if access_token and len(access_token) > 0:
-        send_msg_url = f'https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={access_token}'
-        data = {
-            "touser":wecom_touid,
-            "agentid":wecom_aid,
-            "msgtype":"markdown",
-            "markdown":{
-                "content":text
-            },
-            "duplicate_check_interval":600
-        }
-        response = requests.post(send_msg_url,data=json.dumps(data)).content
-        return response
-    else:
-        return False
+修改docker-compose.yml 文件内上述的环境变量，之后执行
+
+`docker-compose up -d`
+
+## 调用方式
+- v1_推送文本
+访问 `http://localhost:8080/wecomchan?sendkey=你配置的sendkey&&msg=需要发送的消息&&msg_type=text`
+
+- v2_推送文本or图片
+
+```bash
+# 推送文本消息
+curl --location --request GET 'http://localhost:8080/wecomchan?sendkey={你的sendkey}&msg={你的文本消息}&msg_type=text'
+
+# 推送图片消息
+curl --location --request POST 'http://localhost:8080/wecomchan?sendkey={你的sendkey}&msg_type=image' \
+--form 'media=@"test.jpg"'
 ```
 
-使用实例：
+## 后续预计添加
 
-```python
-ret = send_to_wecom("推送测试\r\n测试换行", "企业ID③", "应用ID①", "应用secret②");
-print( ret );
-ret = send_to_wecom('<a href="https://www.github.com/">文本中支持超链接</a>', "企业ID③", "应用ID①", "应用secret②");
-print( ret );
-ret = send_to_wecom_image("此处填写图片Base64", "企业ID③", "应用ID①", "应用secret②");
-print( ret );
-ret = send_to_wecom_markdown("**Markdown 内容**", "企业ID③", "应用ID①", "应用secret②");
-print( ret );
-```
-
-TypeScript 版:
-
-```typescript
-import request from 'superagent'
-
-async function sendToWecom(body: {
-  text: string
-  wecomCId: string
-  wecomSecret: string
-  wecomAgentId: string
-  wecomTouid?: string
-}): Promise<{ errcode: number; errmsg: string; invaliduser: string }> {
-  body.wecomTouid = body.wecomTouid ?? '@all'
-  const getTokenUrl = `https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=${body.wecomCId}&corpsecret=${body.wecomSecret}`
-  const getTokenRes = await request.get(getTokenUrl)
-  const accessToken = getTokenRes.body.access_token
-  if (accessToken?.length <= 0) {
-    throw new Error('获取 accessToken 失败')
-  }
-  const sendMsgUrl = `https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=${accessToken}`
-  const sendMsgRes = await request.post(sendMsgUrl).send({
-    touser: body.wecomTouid,
-    agentid: body.wecomAgentId,
-    msgtype: 'text',
-    text: {
-      content: body.text,
-    },
-    duplicate_check_interval: 600,
-  })
-  return sendMsgRes.body
-}
-```
-
-使用实例：
-
-```typescript
-sendToWecom({
-  text: '推送测试\r\n测试换行',
-  wecomAgentId: '应用ID①',
-  wecomSecret: '应用secret②',
-  wecomCId: '企业ID③',
-})
-  .then((res) => {
-    console.log(res)
-  })
-  .catch((err) => {
-    console.log(err)
-  })
-```
-
-.NET Core 版:
-
-```C#
-using System;
-using RestSharp;
-using Newtonsoft.Json;
-namespace WeCom.Demo
-{
-    class WeCom
-    {   
-        public  string SendToWeCom(
-            string text,// 推送消息
-            string weComCId,// 企业Id①
-            string weComSecret,// 应用secret②
-            string weComAId,// 应用ID③
-            string weComTouId = "@all")
-        {
-            // 获取Token
-            string getTokenUrl = $"https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid={weComCId}&corpsecret={weComSecret}";
-            string token = JsonConvert
-            .DeserializeObject<dynamic>(new RestClient(getTokenUrl)
-            .Get(new RestRequest()).Content).access_token;
-            System.Console.WriteLine(token);
-            if (!String.IsNullOrWhiteSpace(token))
-            {
-                var request = new RestRequest();
-                var client = new RestClient($"https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token={token}");
-                var data = new
-                {
-                    touser = weComTouId,
-                    agentid = weComAId,
-                    msgtype = "text",
-                    text = new
-                    {
-                        content = text
-                    },
-                    duplicate_check_interval = 600
-                };
-                string serJson = JsonConvert.SerializeObject(data);
-                System.Console.WriteLine(serJson);
-                request.Method = Method.POST;
-                request.AddHeader("Accept", "application/json");
-                request.Parameters.Clear();
-                request.AddParameter("application/json", serJson, ParameterType.RequestBody);
-                return client.Execute(request).Content;
-            }
-            return "-1";
-        }
-}
-
-
-```
-使用实例:
-```C#
-   static void Main(string[] args)
-        {   // 测试
-            Console.Write(new WeCom().SendToWeCom(
-            "msginfo",
-            "企业Id①"
-            , "应用secret②",
-            "应用ID③"
-            ));
-        }
-
-    }
-```
-
-- [纯Bash版本参考](https://gitee.com/Hemingway2003/pushservice/blob/master/wecom.sh)
-
-其他版本的函数可参照上边的逻辑自行编写，欢迎PR。
-
-发送图片、卡片、文件或 Markdown 消息的高级用法见 [企业微信API](https://work.weixin.qq.com/api/doc/90000/90135/90236)。
-
-
-
+* [x] Dockerfile 打包镜像(不依赖网络环境)
+* [x] 通过环境变量传递企业微信id，secret等，镜像一次构建多次使用
+* [x] docker-compose redis + go-wecomchan 一键部署

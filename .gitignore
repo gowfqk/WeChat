@@ -1,6 +1,16 @@
-demo.php
-show.php
+# Build binaries
+wecomchan
+wecomchan.exe
+
+# OS files
 .DS_Store
 .idea
-go-wecomchan/wecomchan
-go-wecomchan/wecomchan.exe
+
+# Editor files
+.vscode
+*.swp
+*.swo
+*~
+
+# Log files
+*.log
