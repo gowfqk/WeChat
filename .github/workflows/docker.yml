@@ -25,6 +25,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Debug - Check Secrets
+        run: |
+          echo "Checking Docker Hub credentials..."
+          echo "DOCKER_USERNAME exists: ${{ secrets.DOCKER_USERNAME != '' }}"
+          echo "DOCKER_PASSWORD exists: ${{ secrets.DOCKER_PASSWORD != '' }}"
+          echo "DOCKER_USERNAME length: ${#secrets.DOCKER_USERNAME}"
+          if [ -z "${{ secrets.DOCKER_USERNAME }}" ]; then
+            echo "ERROR: DOCKER_USERNAME is empty or not set!"
+            exit 1
+          fi
+          if [ -z "${{ secrets.DOCKER_PASSWORD }}" ]; then
+            echo "ERROR: DOCKER_PASSWORD is empty or not set!"
+            exit 1
+          fi
+          echo "✓ All credentials are set correctly"
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
