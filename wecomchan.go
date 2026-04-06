@@ -340,7 +340,7 @@ func InitJsonData(msgType string) JsonData {
 }
 
 // SendExternalMessage 发送外部联系人消息
-func SendExternalMessage(accessToken string, postData ExternalMessageData) string {
+func SendExternalMessage(accessToken string, postData interface{}) string {
 	postJson, _ := json.Marshal(postData)
 	log.Println("发送外部联系人消息 postJson ", string(postJson))
 
@@ -430,40 +430,95 @@ func externalContactHandler(res http.ResponseWriter, req *http.Request) {
 		requestBody.MsgType = "text"
 	}
 
-	// 准备发送数据
-	postData := ExternalMessageData{
-		ExternalUserIds: requestBody.ExternalUserIds,
-		Sender:          requestBody.Sender,
-		MsgType:         requestBody.MsgType,
+	// 根据消息类型构建请求数据 - 只包含当前消息类型相关的字段
+	var postData interface{}
+	baseData := map[string]interface{}{
+		"external_userid": requestBody.ExternalUserIds,
+		"sender":          requestBody.Sender,
+		"msgtype":         requestBody.MsgType,
 	}
 
-	// 根据消息类型设置对应的内容字段
 	switch requestBody.MsgType {
 	case "text":
 		if requestBody.Text != nil {
-			postData.Text = *requestBody.Text
+			postData = map[string]interface{}{
+				"external_userid": requestBody.ExternalUserIds,
+				"sender":          requestBody.Sender,
+				"msgtype":         "text",
+				"text": map[string]interface{}{
+					"content": requestBody.Text.Content,
+				},
+			}
 			log.Printf("文本消息内容长度: %d\n", len(requestBody.Text.Content))
+		} else {
+			// 兜底：发送空文本消息
+			postData = baseData
 		}
 	case "image":
 		if requestBody.Image != nil {
-			postData.Image = *requestBody.Image
+			postData = map[string]interface{}{
+				"external_userid": requestBody.ExternalUserIds,
+				"sender":          requestBody.Sender,
+				"msgtype":         "image",
+				"image": map[string]interface{}{
+					"media_id": requestBody.Image.MediaId,
+				},
+			}
 			log.Printf("图片消息media_id: %s\n", requestBody.Image.MediaId)
+		} else {
+			postData = baseData
 		}
 	case "markdown":
 		if requestBody.Markdown != nil {
-			postData.Markdown = *requestBody.Markdown
+			postData = map[string]interface{}{
+				"external_userid": requestBody.ExternalUserIds,
+				"sender":          requestBody.Sender,
+				"msgtype":         "markdown",
+				"markdown": map[string]interface{}{
+					"content": requestBody.Markdown.Content,
+				},
+			}
 			log.Printf("Markdown消息内容长度: %d\n", len(requestBody.Markdown.Content))
+		} else {
+			postData = baseData
 		}
 	case "link":
 		if requestBody.Link != nil {
-			postData.Link = *requestBody.Link
+			postData = map[string]interface{}{
+				"external_userid": requestBody.ExternalUserIds,
+				"sender":          requestBody.Sender,
+				"msgtype":         "link",
+				"link": map[string]interface{}{
+					"title":          requestBody.Link.Title,
+					"desc":           requestBody.Link.Description,
+					"url":            requestBody.Link.Url,
+					"thumb_media_id": requestBody.Link.ThumbMediaId,
+				},
+			}
 			log.Printf("链接消息标题: %s\n", requestBody.Link.Title)
+		} else {
+			postData = baseData
 		}
 	case "miniprogram":
 		if requestBody.MiniProgram != nil {
-			postData.MiniProgram = *requestBody.MiniProgram
+			postData = map[string]interface{}{
+				"external_userid": requestBody.ExternalUserIds,
+				"sender":          requestBody.Sender,
+				"msgtype":         "miniprogram",
+				"miniprogram": map[string]interface{}{
+					"title":           requestBody.MiniProgram.Title,
+					"appid":           requestBody.MiniProgram.AppId,
+					"pagepath":        requestBody.MiniProgram.PagePath,
+					"thumb_media_id":  requestBody.MiniProgram.ThumbMediaId,
+				},
+			}
 			log.Printf("小程序消息标题: %s\n", requestBody.MiniProgram.Title)
+		} else {
+			postData = baseData
 		}
+	default:
+		log.Printf("未知消息类型: %s，使用text类型\n", requestBody.MsgType)
+		postData = baseData
 	}
 
 	log.Printf("准备发送的外部联系人数据: %+v\n", postData)
