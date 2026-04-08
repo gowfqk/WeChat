@@ -8,7 +8,7 @@ import (
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	http.HandleFunc("/wecomchan", recoverMiddleware(wecomChan))
-	http.HandleFunc("/external", recoverMiddleware(externalContactHandler))
+	http.HandleFunc("/mail", recoverMiddleware(mailHandler))
 	http.HandleFunc("/healthz", recoverMiddleware(healthz))
 	http.HandleFunc("/readyz", recoverMiddleware(readyz))
 	server := &http.Server{

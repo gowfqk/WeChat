@@ -32,28 +32,11 @@ type JsonData struct {
 	Markdown               Markdown `json:"markdown"`
 }
 
-type ExternalRequestBody struct {
-	Sendkey         string          `json:"sendkey"`
-	ExternalUserIds []string        `json:"external_userid"`
-	Sender          string          `json:"sender"`
-	MsgType         string          `json:"msgtype"`
-	Text            *Msg            `json:"text,omitempty"`
-	Image           *Pic            `json:"image,omitempty"`
-	Markdown        *Markdown       `json:"markdown,omitempty"`
-	Link            *LinkMsg        `json:"link,omitempty"`
-	MiniProgram     *MiniProgramMsg `json:"miniprogram,omitempty"`
-}
-
-type LinkMsg struct {
-	Title        string `json:"title"`
-	Description  string `json:"desc"`
-	Url          string `json:"url"`
-	ThumbMediaId string `json:"thumb_media_id"`
-}
-
-type MiniProgramMsg struct {
-	Title        string `json:"title"`
-	AppId        string `json:"appid"`
-	PagePath     string `json:"pagepath"`
-	ThumbMediaId string `json:"thumb_media_id"`
+type MailRequestBody struct {
+	Sendkey  string   `json:"sendkey"`
+	To       string   `json:"to"`
+	Cc       string   `json:"cc,omitempty"`
+	Subject  string   `json:"subject"`
+	Content  string   `json:"content"`
+	ReplyTo  string   `json:"reply_to,omitempty"`
 }

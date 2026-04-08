@@ -33,7 +33,7 @@ var cacheMutex sync.RWMutex
 
 var GetTokenApi = "https://qyapi.weixin.qq.com/cgi-bin/gettoken?corpid=%s&corpsecret=%s"
 var SendMessageApi = "https://qyapi.weixin.qq.com/cgi-bin/message/send?access_token=%s"
-var ExternalSendMessageApi = "https://qyapi.weixin.qq.com/cgi-bin/externalcontact/message/send?access_token=%s"
 var UploadMediaApi = "https://qyapi.weixin.qq.com/cgi-bin/media/upload?access_token=%s&type=%s"
+var MailComposeSendApi = "https://qyapi.weixin.qq.com/cgi-bin/exmail/app/compose_send?access_token=%s"
 
 const RedisTokenKey = "access_token"

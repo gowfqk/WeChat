@@ -85,61 +85,24 @@ func normalizeAppMsgType(msgType string) string {
 	return msgType
 }
 
-func validateExternalRequestBody(requestBody *ExternalRequestBody) (int, string) {
-	if len(requestBody.ExternalUserIds) == 0 {
-		return http.StatusBadRequest, `{"errcode":40003,"errmsg":"external_userid is required"}`
+func validateMailRequestBody(requestBody *MailRequestBody) (int, string) {
+	requestBody.To = strings.TrimSpace(requestBody.To)
+	if requestBody.To == "" {
+		return http.StatusBadRequest, `{"errcode":40010,"errmsg":"to is required"}`
 	}
-	if len(requestBody.ExternalUserIds) > 1000 {
-		return http.StatusBadRequest, `{"errcode":40005,"errmsg":"external_userid exceeds limit 1000"}`
+	requestBody.Subject = strings.TrimSpace(requestBody.Subject)
+	if requestBody.Subject == "" {
+		return http.StatusBadRequest, `{"errcode":40011,"errmsg":"subject is required"}`
 	}
-	seen := make(map[string]struct{}, len(requestBody.ExternalUserIds))
-	clean := make([]string, 0, len(requestBody.ExternalUserIds))
-	for _, id := range requestBody.ExternalUserIds {
-		id = strings.TrimSpace(id)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		clean = append(clean, id)
+	requestBody.Content = strings.TrimSpace(requestBody.Content)
+	if requestBody.Content == "" {
+		return http.StatusBadRequest, `{"errcode":44004,"errmsg":"content is required"}`
 	}
-	requestBody.ExternalUserIds = clean
-	if len(requestBody.ExternalUserIds) == 0 {
-		return http.StatusBadRequest, `{"errcode":40003,"errmsg":"external_userid is required"}`
+	if requestBody.Cc != "" {
+		requestBody.Cc = strings.TrimSpace(requestBody.Cc)
 	}
-	requestBody.Sender = strings.TrimSpace(requestBody.Sender)
-	if requestBody.Sender == "" {
-		return http.StatusBadRequest, `{"errcode":40004,"errmsg":"sender is required"}`
-	}
-	requestBody.MsgType = strings.TrimSpace(strings.ToLower(requestBody.MsgType))
-	if requestBody.MsgType == "" {
-		requestBody.MsgType = "text"
-	}
-	switch requestBody.MsgType {
-	case "text":
-		if requestBody.Text == nil || strings.TrimSpace(requestBody.Text.Content) == "" {
-			return http.StatusBadRequest, `{"errcode":44004,"errmsg":"text content is empty"}`
-		}
-	case "image":
-		if requestBody.Image == nil || strings.TrimSpace(requestBody.Image.MediaId) == "" {
-			return http.StatusBadRequest, `{"errcode":40006,"errmsg":"image.media_id is required"}`
-		}
-	case "markdown":
-		if requestBody.Markdown == nil || strings.TrimSpace(requestBody.Markdown.Content) == "" {
-			return http.StatusBadRequest, `{"errcode":44004,"errmsg":"markdown content is empty"}`
-		}
-	case "link":
-		if requestBody.Link == nil || strings.TrimSpace(requestBody.Link.Title) == "" || strings.TrimSpace(requestBody.Link.Url) == "" {
-			return http.StatusBadRequest, `{"errcode":40007,"errmsg":"link.title and link.url are required"}`
-		}
-	case "miniprogram":
-		if requestBody.MiniProgram == nil || strings.TrimSpace(requestBody.MiniProgram.Title) == "" || strings.TrimSpace(requestBody.MiniProgram.AppId) == "" || strings.TrimSpace(requestBody.MiniProgram.PagePath) == "" || strings.TrimSpace(requestBody.MiniProgram.ThumbMediaId) == "" {
-			return http.StatusBadRequest, `{"errcode":40008,"errmsg":"miniprogram title/appid/pagepath/thumb_media_id are required"}`
-		}
-	default:
-		return http.StatusBadRequest, `{"errcode":40009,"errmsg":"unsupported msgtype"}`
+	if requestBody.ReplyTo != "" {
+		requestBody.ReplyTo = strings.TrimSpace(requestBody.ReplyTo)
 	}
 	return 0, ""
 }

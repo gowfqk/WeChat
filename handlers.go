@@ -8,52 +8,55 @@ import (
 	"strings"
 )
 
-func externalContactHandler(res http.ResponseWriter, req *http.Request) {
+func mailHandler(res http.ResponseWriter, req *http.Request) {
 	if !requirePost(res, req) {
 		return
 	}
 	res.Header().Set("Content-Type", "application/json")
 	req.Body = http.MaxBytesReader(res, req.Body, 1<<20)
+
 	accessToken := GetAccessToken()
 	if accessToken == "" {
 		writeJSON(res, http.StatusBadGateway, `{"errcode":50001,"errmsg":"failed to get access token"}`)
 		return
 	}
+
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
 		writeJSON(res, http.StatusBadRequest, `{"errcode":40001,"errmsg":"invalid request body"}`)
 		return
 	}
-	var requestBody ExternalRequestBody
+
+	var requestBody MailRequestBody
 	if err = json.Unmarshal(body, &requestBody); err != nil {
 		writeJSON(res, http.StatusBadRequest, `{"errcode":40002,"errmsg":"invalid json format"}`)
 		return
 	}
+
 	if requestBody.Sendkey != Sendkey {
 		writeJSON(res, http.StatusUnauthorized, `{"errcode":40001,"errmsg":"invalid sendkey"}`)
 		return
 	}
-	if status, body := validateExternalRequestBody(&requestBody); status != 0 {
+
+	if status, body := validateMailRequestBody(&requestBody); status != 0 {
 		writeJSON(res, status, body)
 		return
 	}
-	baseData := map[string]interface{}{"external_userid": requestBody.ExternalUserIds, "sender": requestBody.Sender, "msgtype": requestBody.MsgType}
-	var postData interface{}
-	switch requestBody.MsgType {
-	case "text":
-		postData = map[string]interface{}{"external_userid": requestBody.ExternalUserIds, "sender": requestBody.Sender, "msgtype": "text", "text": map[string]interface{}{"content": requestBody.Text.Content}}
-	case "image":
-		postData = map[string]interface{}{"external_userid": requestBody.ExternalUserIds, "sender": requestBody.Sender, "msgtype": "image", "image": map[string]interface{}{"media_id": requestBody.Image.MediaId}}
-	case "markdown":
-		postData = map[string]interface{}{"external_userid": requestBody.ExternalUserIds, "sender": requestBody.Sender, "msgtype": "markdown", "markdown": map[string]interface{}{"content": requestBody.Markdown.Content}}
-	case "link":
-		postData = map[string]interface{}{"external_userid": requestBody.ExternalUserIds, "sender": requestBody.Sender, "msgtype": "link", "link": map[string]interface{}{"title": requestBody.Link.Title, "desc": requestBody.Link.Description, "url": requestBody.Link.Url, "thumb_media_id": requestBody.Link.ThumbMediaId}}
-	case "miniprogram":
-		postData = map[string]interface{}{"external_userid": requestBody.ExternalUserIds, "sender": requestBody.Sender, "msgtype": "miniprogram", "miniprogram": map[string]interface{}{"title": requestBody.MiniProgram.Title, "appid": requestBody.MiniProgram.AppId, "pagepath": requestBody.MiniProgram.PagePath, "thumb_media_id": requestBody.MiniProgram.ThumbMediaId}}
-	default:
-		postData = baseData
+
+	postData := map[string]interface{}{
+		"to":      requestBody.To,
+		"subject": requestBody.Subject,
+		"content": requestBody.Content,
 	}
-	writeJSON(res, http.StatusOK, SendExternalMessage(accessToken, postData))
+
+	if requestBody.Cc != "" {
+		postData["cc"] = requestBody.Cc
+	}
+	if requestBody.ReplyTo != "" {
+		postData["reply_to"] = requestBody.ReplyTo
+	}
+
+	writeJSON(res, http.StatusOK, SendMailMessage(accessToken, postData))
 }
 
 func wecomChan(res http.ResponseWriter, req *http.Request) {

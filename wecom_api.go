@@ -171,24 +171,24 @@ func GetAccessToken() string {
 	return accessToken
 }
 
-func SendExternalMessage(accessToken string, postData interface{}) string {
+func SendMailMessage(accessToken string, postData interface{}) string {
 	postJson, _ := json.Marshal(postData)
-	sendMessageUrl := fmt.Sprintf(ExternalSendMessageApi, accessToken)
-	msgReq, err := http.NewRequest("POST", sendMessageUrl, bytes.NewBuffer(postJson))
+	sendMailUrl := fmt.Sprintf(MailComposeSendApi, accessToken)
+	msgReq, err := http.NewRequest("POST", sendMailUrl, bytes.NewBuffer(postJson))
 	if err != nil {
-		log.Println("创建请求失败:", err)
+		log.Println("创建邮件请求失败:", err)
 		return `{"errcode":500,"errmsg":"create request failed"}`
 	}
 	msgReq.Header.Set("Content-Type", "application/json")
 	resp, err := httpClient.Do(msgReq)
 	if err != nil {
-		log.Println("发送外部联系人消息失败==>", err)
+		log.Println("发送邮件失败==>", err)
 		return `{"errcode":500,"errmsg":"upstream request failed"}`
 	}
 	defer resp.Body.Close()
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		log.Println("读取外部联系人响应失败==>", err)
+		log.Println("读取邮件响应失败==>", err)
 		return `{"errcode":500,"errmsg":"read upstream response failed"}`
 	}
 	return string(body)
