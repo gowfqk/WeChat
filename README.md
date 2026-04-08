@@ -2,7 +2,7 @@
 
 通过企业微信向微信推送消息的 Go 语言解决方案。
 
-> **项目已重构**：当前版本经过三轮迭代，从单文件脚本演进为结构化、可维护的服务。
+> 本项目基于 [wecomchan](https://github.com/easychen/wecomchan) 重构而来。
 
 ## 功能特性
 
@@ -16,17 +16,28 @@
 - ✅ **Docker 部署**：支持多架构构建（amd64、arm64）
 - ✅ **代码重构**：模块化结构，带单元测试
 
-## 项目演进
-
-| 轮次 | 提交 | 核心改进 |
-|------|------|----------|
-| 第一轮 | `543218d` | **稳定性修复**：去掉 `log.Fatal`、加超时、敏感信息脱敏 |
-| 第二轮 | `485cb27` | **健壮性增强**：panic 恢复、参数校验、服务端超时、就绪检查 |
-| 第三轮 | `fd5a23d` | **架构重构**：单文件 → 6 个职责清晰的文件 + 单元测试 |
-
 ## 快速开始
 
-### Docker 运行（推荐）
+### Docker Compose（推荐）
+
+```yaml
+services:
+  wecomchan:
+    image: gowfqk/go-wecomchan:latest
+    container_name: wecomchan
+    ports:
+      - "8080:8080"
+    environment:
+      - SENDKEY=your_sendkey
+      - WECOM_CID=your_corpid
+      - WECOM_SECRET=your_secret
+      - WECOM_AID=your_agentid
+      - WECOM_TOUID=@all
+      - CACHE_TYPE=memory
+    restart: unless-stopped
+```
+
+### Docker 运行
 
 ```bash
 docker run -d -p 8080:8080 \
@@ -35,7 +46,7 @@ docker run -d -p 8080:8080 \
   -e WECOM_SECRET=your_secret \
   -e WECOM_AID=your_agentid \
   -e CACHE_TYPE=memory \
-  wecomchan:refactor
+  gowfqk/go-wecomchan:latest
 ```
 
 ### 本地运行
@@ -123,6 +134,7 @@ go run .
 ├── handlers.go         # HTTP 处理器
 ├── main.go             # 程序入口
 ├── wecomchan.go        # 原入口（已废弃，保留兼容）
+├── docker-compose.yml  # Docker Compose 配置
 └── Dockerfile
 ```
 
@@ -143,7 +155,7 @@ go test -bench=.
 go build
 
 # Docker 构建
-docker build -t wecomchan:latest .
+docker build -t gowfqk/go-wecomchan:latest .
 ```
 
 ## 许可证
@@ -152,4 +164,4 @@ MIT
 
 ---
 
-> **注意**：外部联系人接口 (`/external`) 需要企业微信开通"客户联系"权限，且发送者账号必须具有相应权限，否则会返回 `48002` 错误。
+> **鸣谢**：本项目基于 [wecomchan](https://github.com/easychen/wecomchan) 开发，感谢原作者。
