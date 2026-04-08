@@ -7,8 +7,9 @@
 ## 功能特性
 
 - ✅ **多消息类型**：文本（text）、Markdown（markdown）、图片（image）、链接（link）、小程序（miniprogram）
-- ✅ **单接口设计**：
+- ✅ **多接口设计**：
   - `/wecomchan` - 企业内部应用消息
+  - `/mail` - 邮件推送消息
 - ✅ **灵活传参**：Body JSON 传参、URL 参数传参
 - ✅ **多重缓存**：不缓存、内存缓存、Redis 缓存
 - ✅ **健康检查**：`/healthz`（存活）、`/readyz`（就绪）
@@ -79,6 +80,24 @@ go run .
   "text": {
     "content": "这是一条测试消息"
   }
+}
+```
+
+### 邮件推送 - `/mail`
+
+**请求方式**：`POST`
+
+**Content-Type**: `application/json`
+
+**请求体示例**：
+
+```json
+{
+  "sendkey": "your_sendkey",
+  "to": "user@example.com",
+  "cc": "cc@example.com",
+  "subject": "邮件主题",
+  "content": "邮件正文内容"
 }
 ```
 
