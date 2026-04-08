@@ -32,6 +32,9 @@ var RedisAddr = GetEnvDefault("REDIS_ADDR", "localhost:6379")
 var RedisPassword = GetEnvDefault("REDIS_PASSWORD", "")
 var ctx = context.Background()
 var httpClient = &http.Client{Timeout: 10 * time.Second}
+var serverReadTimeout = 15 * time.Second
+var serverWriteTimeout = 15 * time.Second
+var serverIdleTimeout = 60 * time.Second
 
 /*-------------------------------  环境变量配置 end  -------------------------------*/
 
@@ -173,6 +176,18 @@ func writeJSON(w http.ResponseWriter, status int, body string) {
 	_, _ = w.Write([]byte(body))
 }
 
+func recoverMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				log.Printf("panic recovered: %v", rec)
+				writeJSON(w, http.StatusInternalServerError, `{"errcode":50000,"errmsg":"internal server error"}`)
+			}
+		}()
+		next(w, r)
+	}
+}
+
 func requirePost(w http.ResponseWriter, r *http.Request) bool {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, `{"errcode":405,"errmsg":"method not allowed"}`)
@@ -193,6 +208,73 @@ func getErrorCode(m map[string]interface{}) float64 {
 		return f
 	}
 	return 0
+}
+
+func normalizeAppMsgType(msgType string) string {
+	msgType = strings.TrimSpace(strings.ToLower(msgType))
+	if msgType == "" {
+		return "text"
+	}
+	return msgType
+}
+
+func validateExternalRequestBody(requestBody *ExternalRequestBody) (int, string) {
+	if len(requestBody.ExternalUserIds) == 0 {
+		return http.StatusBadRequest, `{"errcode":40003,"errmsg":"external_userid is required"}`
+	}
+	if len(requestBody.ExternalUserIds) > 1000 {
+		return http.StatusBadRequest, `{"errcode":40005,"errmsg":"external_userid exceeds limit 1000"}`
+	}
+	seen := make(map[string]struct{}, len(requestBody.ExternalUserIds))
+	clean := make([]string, 0, len(requestBody.ExternalUserIds))
+	for _, id := range requestBody.ExternalUserIds {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		clean = append(clean, id)
+	}
+	requestBody.ExternalUserIds = clean
+	if len(requestBody.ExternalUserIds) == 0 {
+		return http.StatusBadRequest, `{"errcode":40003,"errmsg":"external_userid is required"}`
+	}
+	requestBody.Sender = strings.TrimSpace(requestBody.Sender)
+	if requestBody.Sender == "" {
+		return http.StatusBadRequest, `{"errcode":40004,"errmsg":"sender is required"}`
+	}
+	requestBody.MsgType = strings.TrimSpace(strings.ToLower(requestBody.MsgType))
+	if requestBody.MsgType == "" {
+		requestBody.MsgType = "text"
+	}
+	switch requestBody.MsgType {
+	case "text":
+		if requestBody.Text == nil || strings.TrimSpace(requestBody.Text.Content) == "" {
+			return http.StatusBadRequest, `{"errcode":44004,"errmsg":"text content is empty"}`
+		}
+	case "image":
+		if requestBody.Image == nil || strings.TrimSpace(requestBody.Image.MediaId) == "" {
+			return http.StatusBadRequest, `{"errcode":40006,"errmsg":"image.media_id is required"}`
+		}
+	case "markdown":
+		if requestBody.Markdown == nil || strings.TrimSpace(requestBody.Markdown.Content) == "" {
+			return http.StatusBadRequest, `{"errcode":44004,"errmsg":"markdown content is empty"}`
+		}
+	case "link":
+		if requestBody.Link == nil || strings.TrimSpace(requestBody.Link.Title) == "" || strings.TrimSpace(requestBody.Link.Url) == "" {
+			return http.StatusBadRequest, `{"errcode":40007,"errmsg":"link.title and link.url are required"}`
+		}
+	case "miniprogram":
+		if requestBody.MiniProgram == nil || strings.TrimSpace(requestBody.MiniProgram.Title) == "" || strings.TrimSpace(requestBody.MiniProgram.AppId) == "" || strings.TrimSpace(requestBody.MiniProgram.PagePath) == "" || strings.TrimSpace(requestBody.MiniProgram.ThumbMediaId) == "" {
+			return http.StatusBadRequest, `{"errcode":40008,"errmsg":"miniprogram title/appid/pagepath/thumb_media_id are required"}`
+		}
+	default:
+		return http.StatusBadRequest, `{"errcode":40009,"errmsg":"unsupported msgtype"}`
+	}
+	return 0, ""
 }
 
 // GetRemoteToken 从企业微信服务端API获取access_token，根据配置缓存到redis或内存
@@ -331,16 +413,21 @@ func UploadMedia(msgType string, req *http.Request, accessToken string) (string,
 // ValidateToken 判断accessToken是否失效
 // true-未失效, false-失效需重新获取
 func ValidateToken(errcode interface{}) bool {
+	if errcode == nil {
+		return true
+	}
 	codeTyp := reflect.TypeOf(errcode)
 	log.Println("errcode的数据类型==>", codeTyp)
-	if !codeTyp.Comparable() {
+	if codeTyp == nil || !codeTyp.Comparable() {
 		log.Printf("type is not comparable: %v", codeTyp)
 		return true
 	}
+	f, ok := errcode.(float64)
+	if !ok {
+		return true
+	}
 
-	// 如果errcode为42001表明token已失效，则清空缓存中的token
-	// 已知codeType为float64
-	if math.Abs(errcode.(float64)-float64(42001)) < 1e-3 {
+	if math.Abs(f-float64(42001)) < 1e-3 {
 		if CacheType == "redis" && RedisStat == "ON" {
 			log.Printf("token已失效，开始删除redis中的key==>%s", RedisTokenKey)
 			rdb := RedisClient()
@@ -484,22 +571,9 @@ func externalContactHandler(res http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	if len(requestBody.ExternalUserIds) == 0 {
-		log.Println("错误：external_userid为空")
-		writeJSON(res, http.StatusBadRequest, `{"errcode":40003,"errmsg":"external_userid is required"}`)
+	if status, body := validateExternalRequestBody(&requestBody); status != 0 {
+		writeJSON(res, status, body)
 		return
-	}
-	if len(requestBody.ExternalUserIds) > 1000 {
-		writeJSON(res, http.StatusBadRequest, `{"errcode":40005,"errmsg":"external_userid exceeds limit 1000"}`)
-		return
-	}
-	if requestBody.Sender == "" {
-		log.Println("错误：sender为空")
-		writeJSON(res, http.StatusBadRequest, `{"errcode":40004,"errmsg":"sender is required"}`)
-		return
-	}
-	if requestBody.MsgType == "" {
-		requestBody.MsgType = "text"
 	}
 
 	var postData interface{}
@@ -670,6 +744,11 @@ func main() {
 			log.Println("使用URL参数传参")
 		}
 
+		msgType = normalizeAppMsgType(msgType)
+		msgContent = strings.TrimSpace(msgContent)
+		toUser = strings.TrimSpace(toUser)
+		agentId = strings.TrimSpace(agentId)
+
 		log.Printf("最终参数 - sendkey: '%s', msgType: '%s', msgContent长度: %d\n", maskSecret(sendkey), msgType, len(msgContent))
 
 		if sendkey != Sendkey {
@@ -684,8 +763,9 @@ func main() {
 			return
 		}
 
-		if msgType == "" {
-			msgType = "text"
+		if msgType != "text" && msgType != "markdown" && msgType != "image" {
+			writeJSON(res, http.StatusBadRequest, `{"errcode":40009,"errmsg":"unsupported msgtype"}`)
+			return
 		}
 		if toUser == "" {
 			toUser = WecomToUid
@@ -705,6 +785,10 @@ func main() {
 					break
 				}
 				accessToken = GetAccessToken()
+			}
+			if mediaId == "" {
+				writeJSON(res, http.StatusBadRequest, `{"errcode":40006,"errmsg":"image upload failed or media missing"}`)
+				return
 			}
 		}
 
@@ -750,8 +834,26 @@ func main() {
 		}
 		writeJSON(res, http.StatusOK, `{"status":"ok"}`)
 	}
-	http.HandleFunc("/wecomchan", wecomChan)
-	http.HandleFunc("/external", externalContactHandler)
-	http.HandleFunc("/healthz", healthz)
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	readyz := func(res http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet {
+			writeJSON(res, http.StatusMethodNotAllowed, `{"errcode":405,"errmsg":"method not allowed"}`)
+			return
+		}
+		if GetAccessToken() == "" {
+			writeJSON(res, http.StatusServiceUnavailable, `{"status":"degraded","errmsg":"failed to get access token"}`)
+			return
+		}
+		writeJSON(res, http.StatusOK, `{"status":"ready"}`)
+	}
+	http.HandleFunc("/wecomchan", recoverMiddleware(wecomChan))
+	http.HandleFunc("/external", recoverMiddleware(externalContactHandler))
+	http.HandleFunc("/healthz", recoverMiddleware(healthz))
+	http.HandleFunc("/readyz", recoverMiddleware(readyz))
+	server := &http.Server{
+		Addr:         ":8080",
+		ReadTimeout:  serverReadTimeout,
+		WriteTimeout: serverWriteTimeout,
+		IdleTimeout:  serverIdleTimeout,
+	}
+	log.Fatal(server.ListenAndServe())
 }
