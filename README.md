@@ -120,6 +120,17 @@ go run .
 | `REDIS_ADDR` | Redis 地址 | `localhost:6379` |
 | `REDIS_PASSWORD` | Redis 密码 | - |
 
+### Redis 缓存配置
+
+当 `CACHE_TYPE` 设置为 `redis` 时，系统会使用 Redis 缓存 access_token。需要额外配置：
+
+| 场景 | 配置 |
+|------|------|
+| 单机部署 | `REDIS_STAT=ON`，`REDIS_ADDR=localhost:6379` |
+| 集群部署 | `REDIS_STAT=ON`，`REDIS_ADDR=redis-host:6379`，`REDIS_PASSWORD=your_password` |
+
+**注意**：使用 Redis 缓存时，必须将 `REDIS_STAT` 设置为 `ON`，否则即使 `CACHE_TYPE=redis` 也不会启用 Redis。
+
 ## 项目结构
 
 ```
