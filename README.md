@@ -7,9 +7,8 @@
 ## 功能特性
 
 - ✅ **多消息类型**：文本（text）、Markdown（markdown）、图片（image）、链接（link）、小程序（miniprogram）
-- ✅ **双接口设计**：
+- ✅ **单接口设计**：
   - `/wecomchan` - 企业内部应用消息
-  - `/external` - 外部联系人（客户）消息
 - ✅ **灵活传参**：Body JSON 传参、URL 参数传参
 - ✅ **多重缓存**：不缓存、内存缓存、Redis 缓存
 - ✅ **健康检查**：`/healthz`（存活）、`/readyz`（就绪）
@@ -79,26 +78,6 @@ go run .
   "msg_type": "text",
   "text": {
     "content": "这是一条测试消息"
-  }
-}
-```
-
-### 外部联系人消息 - `/external`
-
-**请求方式**：`POST`
-
-**Content-Type**: `application/json`
-
-**请求体示例**：
-
-```json
-{
-  "sendkey": "your_sendkey",
-  "external_userid": ["wmxxxxxxxxxxxxxxxx"],
-  "sender": "zhangsan",
-  "msgtype": "text",
-  "text": {
-    "content": "您好，这是一条发送给外部联系人的消息"
   }
 }
 ```
