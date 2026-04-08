@@ -5,13 +5,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"math"
 	"mime/multipart"
 	"net/http"
 	"os"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 
@@ -30,6 +31,7 @@ var RedisStat = GetEnvDefault("REDIS_STAT", "OFF")
 var RedisAddr = GetEnvDefault("REDIS_ADDR", "localhost:6379")
 var RedisPassword = GetEnvDefault("REDIS_PASSWORD", "")
 var ctx = context.Background()
+var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 /*-------------------------------  环境变量配置 end  -------------------------------*/
 
@@ -146,8 +148,8 @@ func GetEnvDefault(key, defVal string) string {
 // ParseJson 将json字符串解析为map
 func ParseJson(jsonStr string) map[string]interface{} {
 	var wecomResponse map[string]interface{}
-	if string(jsonStr) != "" {
-		err := json.Unmarshal([]byte(string(jsonStr)), &wecomResponse)
+	if jsonStr != "" {
+		err := json.Unmarshal([]byte(jsonStr), &wecomResponse)
 		if err != nil {
 			log.Println("生成json字符串错误")
 		}
@@ -155,28 +157,71 @@ func ParseJson(jsonStr string) map[string]interface{} {
 	return wecomResponse
 }
 
+func maskSecret(s string) string {
+	if s == "" {
+		return ""
+	}
+	if len(s) <= 6 {
+		return "***"
+	}
+	return s[:3] + strings.Repeat("*", len(s)-6) + s[len(s)-3:]
+}
+
+func writeJSON(w http.ResponseWriter, status int, body string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_, _ = w.Write([]byte(body))
+}
+
+func requirePost(w http.ResponseWriter, r *http.Request) bool {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, `{"errcode":405,"errmsg":"method not allowed"}`)
+		return false
+	}
+	return true
+}
+
+func getErrorCode(m map[string]interface{}) float64 {
+	if m == nil {
+		return 0
+	}
+	v, ok := m["errcode"]
+	if !ok || v == nil {
+		return 0
+	}
+	if f, ok := v.(float64); ok {
+		return f
+	}
+	return 0
+}
+
 // GetRemoteToken 从企业微信服务端API获取access_token，根据配置缓存到redis或内存
 func GetRemoteToken(corpId, appSecret string) string {
 	getTokenUrl := fmt.Sprintf(GetTokenApi, corpId, appSecret)
-	log.Println("getTokenUrl==>", getTokenUrl)
-	resp, err := http.Get(getTokenUrl)
+	log.Printf("getTokenUrl ==> %s", strings.Replace(getTokenUrl, appSecret, "***", 1))
+	resp, err := httpClient.Get(getTokenUrl)
 	if err != nil {
 		log.Println(err)
+		return ""
 	}
 	defer resp.Body.Close()
-	respData, err := ioutil.ReadAll(resp.Body)
+	respData, err := io.ReadAll(resp.Body)
 	if err != nil {
 		log.Println(err)
+		return ""
 	}
 	tokenResponse := ParseJson(string(respData))
 	log.Println("企业微信获取access_token接口返回==>", tokenResponse)
-	accessToken := tokenResponse[RedisTokenKey].(string)
+	accessToken, ok := tokenResponse[RedisTokenKey].(string)
+	if !ok || accessToken == "" {
+		log.Println("企业微信获取access_token失败: missing access_token")
+		return ""
+	}
 
 	// 根据缓存类型选择存储方式
 	if CacheType == "redis" && RedisStat == "ON" {
 		log.Println("prepare to set redis key")
 		rdb := RedisClient()
-		// access_token有效时间为7200秒(2小时)
 		set, err := rdb.SetNX(ctx, RedisTokenKey, accessToken, 7000*time.Second).Result()
 		log.Println(set)
 		if err != nil {
@@ -208,20 +253,24 @@ func RedisClient() *redis.Client {
 // PostMsg 推送消息
 func PostMsg(postData JsonData, postUrl string) string {
 	postJson, _ := json.Marshal(postData)
-	log.Println("postJson ", string(postJson))
 	log.Println("postUrl ", postUrl)
 	msgReq, err := http.NewRequest("POST", postUrl, bytes.NewBuffer(postJson))
 	if err != nil {
 		log.Println(err)
+		return `{"errcode":500,"errmsg":"create request failed"}`
 	}
 	msgReq.Header.Set("Content-Type", "application/json")
-	client := &http.Client{}
-	resp, err := client.Do(msgReq)
+	resp, err := httpClient.Do(msgReq)
 	if err != nil {
-		log.Fatalln("企业微信发送应用消息接口报错==>", err)
+		log.Println("企业微信发送应用消息接口报错==>", err)
+		return `{"errcode":500,"errmsg":"upstream request failed"}`
 	}
-	defer msgReq.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("读取企业微信响应失败==>", err)
+		return `{"errcode":500,"errmsg":"read upstream response failed"}`
+	}
 	mediaResp := ParseJson(string(body))
 	log.Println("企业微信发送应用消息接口返回==>", mediaResp)
 	return string(body)
@@ -229,39 +278,54 @@ func PostMsg(postData JsonData, postUrl string) string {
 
 // UploadMedia  上传临时素材并返回mediaId
 func UploadMedia(msgType string, req *http.Request, accessToken string) (string, float64) {
-	// 企业微信图片上传不能大于2M
 	_ = req.ParseMultipartForm(2 << 20)
 	imgFile, imgHeader, err := req.FormFile("media")
-	log.Printf("文件大小==>%d字节", imgHeader.Size)
 	if err != nil {
-		log.Fatalln("图片文件出错==>", err)
-		// 自定义code无效的图片文件
+		log.Println("图片文件出错==>", err)
 		return "", 400
 	}
+	defer imgFile.Close()
+	log.Printf("文件大小==>%d字节", imgHeader.Size)
 	buf := new(bytes.Buffer)
 	writer := multipart.NewWriter(buf)
-	if createFormFile, err := writer.CreateFormFile("media", imgHeader.Filename); err == nil {
-		readAll, _ := ioutil.ReadAll(imgFile)
-		createFormFile.Write(readAll)
+	createFormFile, err := writer.CreateFormFile("media", imgHeader.Filename)
+	if err != nil {
+		log.Println("创建 multipart 文件失败==>", err)
+		return "", 500
 	}
-	writer.Close()
+	readAll, err := io.ReadAll(imgFile)
+	if err != nil {
+		log.Println("读取图片文件失败==>", err)
+		return "", 500
+	}
+	_, _ = createFormFile.Write(readAll)
+	_ = writer.Close()
 
 	uploadMediaUrl := fmt.Sprintf(UploadMediaApi, accessToken, msgType)
 	log.Println("uploadMediaUrl==>", uploadMediaUrl)
-	newRequest, _ := http.NewRequest("POST", uploadMediaUrl, buf)
+	newRequest, err := http.NewRequest("POST", uploadMediaUrl, buf)
+	if err != nil {
+		log.Println("创建上传请求失败==>", err)
+		return "", 500
+	}
 	newRequest.Header.Set("Content-Type", writer.FormDataContentType())
-	log.Println("Content-Type ", writer.FormDataContentType())
-	client := &http.Client{}
-	resp, err := client.Do(newRequest)
-	respData, _ := ioutil.ReadAll(resp.Body)
+	resp, err := httpClient.Do(newRequest)
+	if err != nil {
+		log.Println("上传临时素材出错==>", err)
+		return "", 500
+	}
+	defer resp.Body.Close()
+	respData, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("读取上传响应失败==>", err)
+		return "", 500
+	}
 	mediaResp := ParseJson(string(respData))
 	log.Println("企业微信上传临时素材接口返回==>", mediaResp)
-	if err != nil {
-		log.Fatalln("上传临时素材出错==>", err)
-		return "", mediaResp["errcode"].(float64)
-	} else {
-		return mediaResp["media_id"].(string), float64(0)
+	if mediaID, ok := mediaResp["media_id"].(string); ok && mediaID != "" {
+		return mediaID, 0
 	}
+	return "", getErrorCode(mediaResp)
 }
 
 // ValidateToken 判断accessToken是否失效
@@ -308,6 +372,8 @@ func GetAccessToken() string {
 		value, err := rdb.Get(ctx, RedisTokenKey).Result()
 		if err == redis.Nil {
 			log.Println("access_token does not exist, need get it from remote API")
+		} else if err != nil {
+			log.Println("从redis获取token失败==>", err)
 		}
 		accessToken = value
 	} else if CacheType == "memory" {
@@ -342,7 +408,7 @@ func InitJsonData(msgType string) JsonData {
 // SendExternalMessage 发送外部联系人消息
 func SendExternalMessage(accessToken string, postData interface{}) string {
 	postJson, _ := json.Marshal(postData)
-	log.Println("发送外部联系人消息 postJson ", string(postJson))
+	log.Println("发送外部联系人消息 postJson prepared")
 
 	sendMessageUrl := fmt.Sprintf(ExternalSendMessageApi, accessToken)
 	log.Println("发送外部联系人消息 URL ", sendMessageUrl)
@@ -350,17 +416,22 @@ func SendExternalMessage(accessToken string, postData interface{}) string {
 	msgReq, err := http.NewRequest("POST", sendMessageUrl, bytes.NewBuffer(postJson))
 	if err != nil {
 		log.Println("创建请求失败:", err)
+		return `{"errcode":500,"errmsg":"create request failed"}`
 	}
 	msgReq.Header.Set("Content-Type", "application/json")
 
-	client := &http.Client{}
-	resp, err := client.Do(msgReq)
+	resp, err := httpClient.Do(msgReq)
 	if err != nil {
-		log.Fatalln("发送外部联系人消息失败==>", err)
+		log.Println("发送外部联系人消息失败==>", err)
+		return `{"errcode":500,"errmsg":"upstream request failed"}`
 	}
 	defer resp.Body.Close()
 
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println("读取外部联系人响应失败==>", err)
+		return `{"errcode":500,"errmsg":"read upstream response failed"}`
+	}
 	respData := ParseJson(string(body))
 	log.Println("发送外部联系人消息接口返回==>", respData)
 
@@ -369,68 +440,68 @@ func SendExternalMessage(accessToken string, postData interface{}) string {
 
 // externalContactHandler 外部联系人消息处理器
 func externalContactHandler(res http.ResponseWriter, req *http.Request) {
+	if !requirePost(res, req) {
+		return
+	}
 	log.Println("========== 收到外部联系人消息请求 ==========")
 	log.Printf("请求方法: %s\n", req.Method)
 	log.Printf("请求URL: %s\n", req.URL.String())
 	log.Printf("Content-Type: %s\n", req.Header.Get("Content-Type"))
 
-	// 获取token
+	res.Header().Set("Content-Type", "application/json")
+	req.Body = http.MaxBytesReader(res, req.Body, 1<<20)
+
 	accessToken := GetAccessToken()
-
-	_ = req.ParseForm()
-
-	// 读取请求体
-	body, err := ioutil.ReadAll(req.Body)
-	if err != nil {
-		log.Println("读取请求体失败:", err)
-		res.Header().Set("Content-type", "application/json")
-		res.Write([]byte(`{"errcode": 40001, "errmsg": "invalid request body"}`))
+	if accessToken == "" {
+		writeJSON(res, http.StatusBadGateway, `{"errcode":50001,"errmsg":"failed to get access token"}`)
 		return
 	}
 
-	log.Printf("请求体内容: %s\n", string(body))
+	_ = req.ParseForm()
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		log.Println("读取请求体失败:", err)
+		writeJSON(res, http.StatusBadRequest, `{"errcode":40001,"errmsg":"invalid request body"}`)
+		return
+	}
 
-	// 解析请求体
+	log.Printf("请求体长度: %d\n", len(body))
+
 	var requestBody ExternalRequestBody
 	err = json.Unmarshal(body, &requestBody)
 	if err != nil {
 		log.Printf("JSON解析失败: %v\n", err)
-		res.Header().Set("Content-type", "application/json")
-		res.Write([]byte(`{"errcode": 40002, "errmsg": "invalid json format"}`))
+		writeJSON(res, http.StatusBadRequest, `{"errcode":40002,"errmsg":"invalid json format"}`)
 		return
 	}
 
-	log.Printf("解析结果 - sendkey: '%s', sender: '%s', msgType: '%s'\n", requestBody.Sendkey, requestBody.Sender, requestBody.MsgType)
+	log.Printf("解析结果 - sendkey: '%s', sender: '%s', msgType: '%s'\n", maskSecret(requestBody.Sendkey), requestBody.Sender, requestBody.MsgType)
 	log.Printf("外部联系人数量: %d\n", len(requestBody.ExternalUserIds))
 
-	// 验证sendkey
 	if requestBody.Sendkey != Sendkey {
-		log.Printf("sendkey验证失败 - 期望: '%s', 实际: '%s'\n", Sendkey, requestBody.Sendkey)
-		res.Header().Set("Content-type", "application/json")
-		res.Write([]byte(`{"errcode": 40001, "errmsg": "invalid sendkey"}`))
+		log.Printf("sendkey验证失败 - 期望: '%s', 实际: '%s'\n", maskSecret(Sendkey), maskSecret(requestBody.Sendkey))
+		writeJSON(res, http.StatusUnauthorized, `{"errcode":40001,"errmsg":"invalid sendkey"}`)
 		return
 	}
 
-	// 验证必需字段
 	if len(requestBody.ExternalUserIds) == 0 {
 		log.Println("错误：external_userid为空")
-		res.Header().Set("Content-type", "application/json")
-		res.Write([]byte(`{"errcode": 40003, "errmsg": "external_userid is required"}`))
+		writeJSON(res, http.StatusBadRequest, `{"errcode":40003,"errmsg":"external_userid is required"}`)
 		return
 	}
-
+	if len(requestBody.ExternalUserIds) > 1000 {
+		writeJSON(res, http.StatusBadRequest, `{"errcode":40005,"errmsg":"external_userid exceeds limit 1000"}`)
+		return
+	}
 	if requestBody.Sender == "" {
 		log.Println("错误：sender为空")
-		res.Header().Set("Content-type", "application/json")
-		res.Write([]byte(`{"errcode": 40004, "errmsg": "sender is required"}`))
+		writeJSON(res, http.StatusBadRequest, `{"errcode":40004,"errmsg":"sender is required"}`)
 		return
 	}
-
 	if requestBody.MsgType == "" {
 		requestBody.MsgType = "text"
 	}
 
-	// 根据消息类型构建请求数据 - 只包含当前消息类型相关的字段
 	var postData interface{}
 	baseData := map[string]interface{}{
 		"external_userid": requestBody.ExternalUserIds,
@@ -526,59 +597,50 @@ func externalContactHandler(res http.ResponseWriter, req *http.Request) {
 	// 发送消息
 	response := SendExternalMessage(accessToken, postData)
 
-	res.Header().Set("Content-type", "application/json")
-	res.Write([]byte(response))
+	writeJSON(res, http.StatusOK, response)
 	log.Println("========== 外部联系人消息请求处理完成 ==========")
 }
 
 // 主函数入口
 func main() {
-	// 设置日志内容显示文件名和行号
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	wecomChan := func(res http.ResponseWriter, req *http.Request) {
+		if !requirePost(res, req) {
+			return
+		}
 		log.Println("========== 收到新请求 ==========")
 		log.Printf("请求方法: %s\n", req.Method)
 		log.Printf("请求URL: %s\n", req.URL.String())
 		log.Printf("Content-Type: %s\n", req.Header.Get("Content-Type"))
+		res.Header().Set("Content-Type", "application/json")
+		req.Body = http.MaxBytesReader(res, req.Body, 1<<20)
 
-		// 获取token
 		accessToken := GetAccessToken()
-		// 默认token有效
+		if accessToken == "" {
+			writeJSON(res, http.StatusBadGateway, `{"errcode":50001,"errmsg":"failed to get access token"}`)
+			return
+		}
 		tokenValid := true
 
 		_ = req.ParseForm()
-
-		// 定义变量用于存储参数
 		var sendkey, msgContent, msgType, toUser, agentId string
 
-		// 尝试从请求体（body）中解析JSON参数
 		var requestBody RequestBody
-		body, err := ioutil.ReadAll(req.Body)
+		body, err := io.ReadAll(req.Body)
 		if err == nil && len(body) > 0 {
-			log.Printf("请求体内容: %s\n", string(body))
+			log.Printf("请求体长度: %d\n", len(body))
 			err = json.Unmarshal(body, &requestBody)
 			if err == nil {
-				// 成功解析JSON请求体
 				sendkey = requestBody.Sendkey
 				msgType = requestBody.MsgType
 				toUser = requestBody.ToUser
 				agentId = requestBody.AgentId
 
-				log.Printf("解析结果 - sendkey: '%s', msgType: '%s'\n", sendkey, msgType)
-				log.Printf("requestBody.Msg: '%s'\n", requestBody.Msg)
-				if requestBody.Text != nil {
-					log.Printf("requestBody.Text.Content: '%s'\n", requestBody.Text.Content)
-				}
-				if requestBody.Markdown != nil {
-					log.Printf("requestBody.Markdown.Content: '%s'\n", requestBody.Markdown.Content)
-				}
-
-				// 优先使用简化格式（向后兼容）
+				log.Printf("解析结果 - sendkey: '%s', msgType: '%s'\n", maskSecret(sendkey), msgType)
 				if requestBody.Msg != "" {
 					msgContent = requestBody.Msg
 					log.Println("使用body传参（简化格式）")
 				} else {
-					// 使用官方格式（text.content 或 markdown.content）
 					if requestBody.Text != nil && requestBody.Text.Content != "" {
 						msgContent = requestBody.Text.Content
 						log.Println("使用body传参（官方格式 - text）")
@@ -590,43 +652,38 @@ func main() {
 					}
 				}
 			} else {
-				// JSON解析失败，回退到URL参数
 				log.Printf("JSON解析失败: %v，回退到URL参数\n", err)
 			}
 		} else {
 			log.Println("请求体为空或读取失败")
 		}
 
-		// 如果body中没有获取到参数，则从URL参数中获取（保持向后兼容）
 		if sendkey == "" {
 			sendkey = req.FormValue("sendkey")
 			msgContent = req.FormValue("msg")
 			msgType = req.FormValue("msg_type")
+			if msgType == "" {
+				msgType = req.FormValue("msgtype")
+			}
 			toUser = req.FormValue("touser")
 			agentId = req.FormValue("agentid")
 			log.Println("使用URL参数传参")
 		}
 
-		log.Printf("最终参数 - sendkey: '%s', msgType: '%s', msgContent: '%s'\n", sendkey, msgType, msgContent)
-		log.Printf("环境变量Sendkey: '%s'\n", Sendkey)
+		log.Printf("最终参数 - sendkey: '%s', msgType: '%s', msgContent长度: %d\n", maskSecret(sendkey), msgType, len(msgContent))
 
-		// 验证sendkey
 		if sendkey != Sendkey {
-			log.Printf("sendkey验证失败 - 期望: '%s', 实际: '%s'\n", Sendkey, sendkey)
-			res.Header().Set("Content-type", "application/json")
-			res.Write([]byte(`{"errcode": 40001, "errmsg": "invalid sendkey"}`))
+			log.Printf("sendkey验证失败 - 期望: '%s', 实际: '%s'\n", maskSecret(Sendkey), maskSecret(sendkey))
+			writeJSON(res, http.StatusUnauthorized, `{"errcode":40001,"errmsg":"invalid sendkey"}`)
 			return
 		}
 
-		// 检查msgContent是否为空
 		if msgContent == "" {
 			log.Println("错误：msgContent为空")
-			res.Header().Set("Content-type", "application/json")
-			res.Write([]byte(`{"errcode": 44004, "errmsg": "text content is empty"}`))
+			writeJSON(res, http.StatusBadRequest, `{"errcode":44004,"errmsg":"text content is empty"}`)
 			return
 		}
 
-		// 设置默认值
 		if msgType == "" {
 			msgType = "text"
 		}
@@ -637,13 +694,8 @@ func main() {
 			agentId = WecomAid
 		}
 
-		log.Println("mes_type=", msgType)
-		// 默认mediaId为空
 		mediaId := ""
-		if msgType != "image" {
-			log.Println("消息类型不是图片")
-		} else {
-			// token有效则跳出循环继续执行，否则重试3次
+		if msgType == "image" {
 			for i := 0; i <= 3; i++ {
 				var errcode float64
 				mediaId, errcode = UploadMedia(msgType, req, accessToken)
@@ -652,34 +704,23 @@ func main() {
 				if tokenValid {
 					break
 				}
-
 				accessToken = GetAccessToken()
 			}
 		}
 
-		// 准备发送应用消息所需参数
 		postData := JsonData{
 			ToUser:                 toUser,
 			AgentId:                agentId,
 			MsgType:                msgType,
 			DuplicateCheckInterval: 600,
 		}
-		// 根据消息类型设置对应的内容字段
 		if msgType == "markdown" {
-			postData.Markdown = Markdown{
-				Content: msgContent,
-			}
+			postData.Markdown = Markdown{Content: msgContent}
 		} else {
-			postData.Text = Msg{
-				Content: msgContent,
-			}
+			postData.Text = Msg{Content: msgContent}
 		}
-
-		// 如果是图片消息，设置MediaId
 		if msgType == "image" {
-			postData.Image = Pic{
-				MediaId: mediaId,
-			}
+			postData.Image = Pic{MediaId: mediaId}
 		}
 
 		log.Printf("准备发送的数据: %+v\n", postData)
@@ -693,19 +734,24 @@ func main() {
 			errcode := postResponse["errcode"]
 			log.Println("发送应用消息接口返回errcode==>", errcode)
 			tokenValid = ValidateToken(errcode)
-			// token有效则跳出循环继续执行，否则重试3次
 			if tokenValid {
 				break
 			}
-			// 刷新token
 			accessToken = GetAccessToken()
 		}
 
-		res.Header().Set("Content-type", "application/json")
-		_, _ = res.Write([]byte(postStatus))
+		writeJSON(res, http.StatusOK, postStatus)
 		log.Println("========== 请求处理完成 ==========")
+	}
+	healthz := func(res http.ResponseWriter, req *http.Request) {
+		if req.Method != http.MethodGet {
+			writeJSON(res, http.StatusMethodNotAllowed, `{"errcode":405,"errmsg":"method not allowed"}`)
+			return
+		}
+		writeJSON(res, http.StatusOK, `{"status":"ok"}`)
 	}
 	http.HandleFunc("/wecomchan", wecomChan)
 	http.HandleFunc("/external", externalContactHandler)
+	http.HandleFunc("/healthz", healthz)
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
