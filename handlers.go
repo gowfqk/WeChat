@@ -50,10 +50,24 @@ func mailHandler(res http.ResponseWriter, req *http.Request) {
 	}
 
 	// 添加底部访问链接
-	if MailFooterUrl != "" {
-		footer := "<br><br><a href='" + MailFooterUrl + "' target='_blank'>访问地址</a>"
+	if MailFooterUrl != "" || requestBody.ServerName != "" || requestBody.ServerIP != "" {
+		var footer string
 		if requestBody.ContentType == "text" {
-			footer = "\n\n访问地址: " + MailFooterUrl
+			footer = ""
+			if requestBody.ServerName != "" || requestBody.ServerIP != "" {
+				footer = "\n\n" + requestBody.ServerName + ":" + requestBody.ServerIP + " 已离线"
+			}
+			if MailFooterUrl != "" {
+				footer += "\n访问地址: " + MailFooterUrl
+			}
+		} else {
+			footer = "<br>"
+			if requestBody.ServerName != "" || requestBody.ServerIP != "" {
+				footer += "<br><b>" + requestBody.ServerName + ":" + requestBody.ServerIP + "</b> 已离线"
+			}
+			if MailFooterUrl != "" {
+				footer += "<br><a href='" + MailFooterUrl + "' target='_blank'>访问地址</a>"
+			}
 		}
 		postData["content"] = postData["content"].(string) + footer
 	}

@@ -42,6 +42,8 @@ type MailRequestBody struct {
 	ContentType   string           `json:"content_type,omitempty"`
 	AttachmentList []MailAttachment `json:"attachment_list,omitempty"`
 	EnableIdTrans uint32           `json:"enable_id_trans,omitempty"`
+	ServerName    string           `json:"server_name,omitempty"`
+	ServerIP      string           `json:"server_ip,omitempty"`
 }
 
 type MailRecipient struct {

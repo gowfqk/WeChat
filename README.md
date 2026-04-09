@@ -135,6 +135,8 @@ go run .
 | `attachment_list[].file_name` | 否 | 文件名 |
 | `attachment_list[].content` | 否 | 文件内容（base64编码） |
 | `enable_id_trans` | 否 | 是否开启id转译：`0`（默认）或 `1` |
+| `server_name` | 否 | 服务器名称，会自动添加到邮件底部显示 |
+| `server_ip` | 否 | 服务器IP，会自动添加到邮件底部显示 |
 
 ### 健康检查
 
