@@ -49,6 +49,15 @@ func mailHandler(res http.ResponseWriter, req *http.Request) {
 		"content": requestBody.Content,
 	}
 
+	// 添加底部访问链接
+	if MailFooterUrl != "" {
+		footer := "<br><br><a href='" + MailFooterUrl + "' target='_blank'>访问地址</a>"
+		if requestBody.ContentType == "text" {
+			footer = "\n\n访问地址: " + MailFooterUrl
+		}
+		postData["content"] = postData["content"].(string) + footer
+	}
+
 	if requestBody.Cc.Emails != nil || requestBody.Cc.Userids != nil {
 		postData["cc"] = requestBody.Cc
 	}

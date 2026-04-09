@@ -154,6 +154,7 @@ go run .
 | `REDIS_STAT` | Redis 开关：`ON`/`OFF` | `OFF` |
 | `REDIS_ADDR` | Redis 地址 | `localhost:6379` |
 | `REDIS_PASSWORD` | Redis 密码 | - |
+| `MAIL_FOOTER_URL` | 邮件底部访问链接 | - |
 
 ### Redis 缓存配置
 

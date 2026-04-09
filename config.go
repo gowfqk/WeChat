@@ -16,6 +16,7 @@ var CacheType = GetEnvDefault("CACHE_TYPE", "none")
 var RedisStat = GetEnvDefault("REDIS_STAT", "OFF")
 var RedisAddr = GetEnvDefault("REDIS_ADDR", "localhost:6379")
 var RedisPassword = GetEnvDefault("REDIS_PASSWORD", "")
+var MailFooterUrl = GetEnvDefault("MAIL_FOOTER_URL", "")
 
 var ctx = context.Background()
 var httpClient = &http.Client{Timeout: 10 * time.Second}
