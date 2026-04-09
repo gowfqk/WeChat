@@ -86,9 +86,8 @@ func normalizeAppMsgType(msgType string) string {
 }
 
 func validateMailRequestBody(requestBody *MailRequestBody) (int, string) {
-	requestBody.To = strings.TrimSpace(requestBody.To)
-	if requestBody.To == "" {
-		return http.StatusBadRequest, `{"errcode":40010,"errmsg":"to is required"}`
+	if len(requestBody.To.Emails) == 0 && len(requestBody.To.Userids) == 0 {
+		return http.StatusBadRequest, `{"errcode":40010,"errmsg":"to.emails or to.userids is required"}`
 	}
 	requestBody.Subject = strings.TrimSpace(requestBody.Subject)
 	if requestBody.Subject == "" {
@@ -97,12 +96,6 @@ func validateMailRequestBody(requestBody *MailRequestBody) (int, string) {
 	requestBody.Content = strings.TrimSpace(requestBody.Content)
 	if requestBody.Content == "" {
 		return http.StatusBadRequest, `{"errcode":44004,"errmsg":"content is required"}`
-	}
-	if requestBody.Cc != "" {
-		requestBody.Cc = strings.TrimSpace(requestBody.Cc)
-	}
-	if requestBody.ReplyTo != "" {
-		requestBody.ReplyTo = strings.TrimSpace(requestBody.ReplyTo)
 	}
 	return 0, ""
 }

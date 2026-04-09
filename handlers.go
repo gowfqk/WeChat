@@ -49,11 +49,20 @@ func mailHandler(res http.ResponseWriter, req *http.Request) {
 		"content": requestBody.Content,
 	}
 
-	if requestBody.Cc != "" {
+	if requestBody.Cc.Emails != nil || requestBody.Cc.Userids != nil {
 		postData["cc"] = requestBody.Cc
 	}
-	if requestBody.ReplyTo != "" {
-		postData["reply_to"] = requestBody.ReplyTo
+	if requestBody.Bcc.Emails != nil || requestBody.Bcc.Userids != nil {
+		postData["bcc"] = requestBody.Bcc
+	}
+	if requestBody.ContentType != "" {
+		postData["content_type"] = requestBody.ContentType
+	}
+	if len(requestBody.AttachmentList) > 0 {
+		postData["attachment_list"] = requestBody.AttachmentList
+	}
+	if requestBody.EnableIdTrans != 0 {
+		postData["enable_id_trans"] = requestBody.EnableIdTrans
 	}
 
 	writeJSON(res, http.StatusOK, SendMailMessage(accessToken, postData))

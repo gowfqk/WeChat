@@ -33,10 +33,23 @@ type JsonData struct {
 }
 
 type MailRequestBody struct {
-	Sendkey  string   `json:"sendkey"`
-	To       string   `json:"to"`
-	Cc       string   `json:"cc,omitempty"`
-	Subject  string   `json:"subject"`
-	Content  string   `json:"content"`
-	ReplyTo  string   `json:"reply_to,omitempty"`
+	Sendkey       string           `json:"sendkey"`
+	To            MailRecipient    `json:"to"`
+	Cc            MailRecipient    `json:"cc,omitempty"`
+	Bcc           MailRecipient    `json:"bcc,omitempty"`
+	Subject       string           `json:"subject"`
+	Content       string           `json:"content"`
+	ContentType   string           `json:"content_type,omitempty"`
+	AttachmentList []MailAttachment `json:"attachment_list,omitempty"`
+	EnableIdTrans uint32           `json:"enable_id_trans,omitempty"`
+}
+
+type MailRecipient struct {
+	Emails  []string `json:"emails,omitempty"`
+	Userids []string `json:"userids,omitempty"`
+}
+
+type MailAttachment struct {
+	FileName string `json:"file_name"`
+	Content  string `json:"content"`
 }

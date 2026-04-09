@@ -94,12 +94,47 @@ go run .
 ```json
 {
   "sendkey": "your_sendkey",
-  "to": "user@example.com",
-  "cc": "cc@example.com",
+  "to": {
+    "emails": ["user@example.com"],
+    "userids": ["william"]
+  },
+  "cc": {
+    "emails": ["cc@example.com"],
+    "userids": ["panyy"]
+  },
+  "bcc": {
+    "emails": ["bcc@example.com"]
+  },
   "subject": "邮件主题",
-  "content": "邮件正文内容"
+  "content": "邮件正文内容",
+  "content_type": "html",
+  "attachment_list": [
+    {
+      "file_name": "a.txt",
+      "content": "BASE64_CONTENT"
+    }
+  ],
+  "enable_id_trans": 1
 }
 ```
+
+**参数说明**：
+
+| 参数 | 必填 | 说明 |
+|------|------|------|
+| `sendkey` | 是 | 验证密钥 |
+| `to` | 是 | 收件人对象，含 `emails`（邮箱数组）或 `userids`（企业成员userid数组），至少传一个 |
+| `to.emails` | 否 | 收件人邮箱地址数组 |
+| `to.userids` | 否 | 收件人企业成员userid数组 |
+| `cc` | 否 | 抄送人对象，格式同 `to` |
+| `bcc` | 否 | 密送人对象，格式同 `to` |
+| `subject` | 是 | 邮件主题 |
+| `content` | 是 | 邮件正文 |
+| `content_type` | 否 | 内容类型：`html`（默认）或 `text` |
+| `attachment_list` | 否 | 附件列表 |
+| `attachment_list[].file_name` | 否 | 文件名 |
+| `attachment_list[].content` | 否 | 文件内容（base64编码） |
+| `enable_id_trans` | 否 | 是否开启id转译：`0`（默认）或 `1` |
 
 ### 健康检查
 
