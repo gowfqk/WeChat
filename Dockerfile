@@ -8,7 +8,7 @@ WORKDIR /go/src/app
 COPY . .
 
 RUN apk update && apk add --no-cache ca-certificates
-RUN go mod tidy
+RUN rm go.sum && go mod tidy
 RUN go build -o go-push
 
 FROM scratch
