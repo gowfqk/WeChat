@@ -85,6 +85,19 @@ func normalizeAppMsgType(msgType string) string {
 	return msgType
 }
 
+func validateExternalRequestBody(requestBody *ExternalRequestBody) (int, string) {
+	if len(requestBody.ExternalUserIds) == 0 {
+		return http.StatusBadRequest, `{"errcode":40003,"errmsg":"external_userid is required"}`
+	}
+	if len(requestBody.ExternalUserIds) > 1000 {
+		return http.StatusBadRequest, `{"errcode":40005,"errmsg":"external_userid exceeds limit 1000"}`
+	}
+	if requestBody.Sender == "" {
+		return http.StatusBadRequest, `{"errcode":40004,"errmsg":"sender is required"}`
+	}
+	return 0, ""
+}
+
 func validateMailRequestBody(requestBody *MailRequestBody) (int, string) {
 	if len(requestBody.To.Emails) == 0 && len(requestBody.To.Userids) == 0 {
 		return http.StatusBadRequest, `{"errcode":40010,"errmsg":"to.emails or to.userids is required"}`

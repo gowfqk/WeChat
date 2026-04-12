@@ -1,4 +1,4 @@
-module go/push
+module github.com/gowfqk/go-push
 
 go 1.22
 

@@ -81,9 +81,9 @@ func TestGetErrorCode(t *testing.T) {
 		{nil, 0},
 		{map[string]interface{}{}, 0},
 		{map[string]interface{}{"errcode": nil}, 0},
-		{map[string]interface{}{"errcode": 0}, 0},
-		{map[string]interface{}{"errcode": 42001}, 42001},
-		{map[string]interface{}{"errcode": 40001}, 40001},
+		{map[string]interface{}{"errcode": float64(0)}, float64(0)},
+		{map[string]interface{}{"errcode": float64(42001)}, float64(42001)},
+		{map[string]interface{}{"errcode": float64(40001)}, float64(40001)},
 	}
 
 	for _, tt := range tests {

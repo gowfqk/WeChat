@@ -32,6 +32,8 @@ type MailRequestBody struct {
 	ContentType    string           `json:"content_type,omitempty"`
 	AttachmentList []MailAttachment `json:"attachment_list,omitempty"`
 	EnableIdTrans  uint32           `json:"enable_id_trans,omitempty"`
+	ServerName     string           `json:"server_name,omitempty"`
+	ServerIP       string           `json:"server_ip,omitempty"`
 }
 
 type MailRecipient struct {
@@ -67,26 +69,10 @@ type JsonData struct {
 	Markdown               Markdown `json:"markdown"`
 }
 
-type MailRequestBody struct {
-	Sendkey       string           `json:"sendkey"`
-	To            MailRecipient    `json:"to"`
-	Cc            MailRecipient    `json:"cc,omitempty"`
-	Bcc           MailRecipient    `json:"bcc,omitempty"`
-	Subject       string           `json:"subject"`
-	Content       string           `json:"content"`
-	ContentType   string           `json:"content_type,omitempty"`
-	AttachmentList []MailAttachment `json:"attachment_list,omitempty"`
-	EnableIdTrans uint32           `json:"enable_id_trans,omitempty"`
-	ServerName    string           `json:"server_name,omitempty"`
-	ServerIP      string           `json:"server_ip,omitempty"`
-}
-
-type MailRecipient struct {
-	Emails  []string `json:"emails,omitempty"`
-	Userids []string `json:"userids,omitempty"`
-}
-
-type MailAttachment struct {
-	FileName string `json:"file_name"`
-	Content  string `json:"content"`
+type ExternalRequestBody struct {
+	ExternalUserIds []string `json:"external_userids"`
+	Sender          string   `json:"sender,omitempty"`
+	MsgType         string   `json:"msgtype,omitempty"`
+	Text            *Msg     `json:"text,omitempty"`
+	Markdown        *Markdown `json:"markdown,omitempty"`
 }
