@@ -1,7 +1,4 @@
-FROM golang:1.16.5-alpine3.13 AS gobuilder
-
-# 替换为国内源
-RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.ustc.edu.cn/g' /etc/apk/repositories
+FROM golang:1.22-alpine AS gobuilder
 
 ENV GO111MODULE="on"
 ENV GOPROXY="https://goproxy.cn,direct"
@@ -10,8 +7,8 @@ ENV CGO_ENABLED=0
 WORKDIR /go/src/app
 COPY . .
 
-RUN apk update && apk upgrade && apk add --no-cache ca-certificates
-RUN update-ca-certificates
+RUN apk update && apk add --no-cache ca-certificates
+RUN go mod tidy
 RUN go build -o go-push
 
 FROM scratch
