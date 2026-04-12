@@ -43,7 +43,7 @@ services:
   # 可选：使用 Redis 缓存时启用
   # redis:
   #   image: redis:7-alpine
-  #   container_name: wecomchan-redis
+  #   container_name: go-push-redis
   #   ports:
   #     - "6379:6379"
   #   volumes:

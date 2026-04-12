@@ -32,22 +32,28 @@ services:
     ports:
       - "8080:8080"
     environment:
-      # 必填
       - SENDKEY=your_sendkey
+      # 企业微信（按需配置）
       - WECOM_CID=your_corpid
       - WECOM_SECRET=your_secret
       - WECOM_AID=your_agentid
-      # 按需配置其他渠道
       - WECOM_TOUID=@all
-      - CACHE_TYPE=memory
-      # - BARK_URL=https://api.day.app/your_key
+      # 钉钉
       # - DINGTALK_TOKEN=your_token
       # - DINGTALK_SECRET=your_secret
+      # 飞书
       # - FEISHU_WEBHOOK=https://open.feishu.cn/open-apis/bot/v2/hook/xxx
+      # Telegram
       # - TELEGRAM_BOT_TOKEN=your_bot_token
       # - TELEGRAM_CHAT_ID=your_chat_id
+      # Bark
+      # - BARK_URL=https://api.day.app/your_key
+      # Server酱
       # - SERVERCHAN_KEY=your_key
+      # PushPlus
       # - PUSHPLUS_TOKEN=your_token
+      # 缓存
+      - CACHE_TYPE=memory
     restart: unless-stopped
 ```
 
@@ -55,7 +61,7 @@ services:
 
 ```bash
 cp .env.example .env
-# 编辑 .env 填入配置
+# 编辑 .env，只填你需要的渠道配置
 source .env
 go run .
 ```
