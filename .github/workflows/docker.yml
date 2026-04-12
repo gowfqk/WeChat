@@ -28,7 +28,7 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: |
-            gowfqk/go-wecomchan
+            gowfqk/go-push
           tags: |
             type=ref,event=branch
             type=ref,event=pr

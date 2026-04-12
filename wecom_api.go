@@ -193,3 +193,5 @@ func SendMailMessage(accessToken string, postData interface{}) string {
 	}
 	return string(body)
 }
+
+

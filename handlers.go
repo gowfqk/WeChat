@@ -8,89 +8,6 @@ import (
 	"strings"
 )
 
-func mailHandler(res http.ResponseWriter, req *http.Request) {
-	if !requirePost(res, req) {
-		return
-	}
-	res.Header().Set("Content-Type", "application/json")
-	req.Body = http.MaxBytesReader(res, req.Body, 1<<20)
-
-	accessToken := GetAccessToken()
-	if accessToken == "" {
-		writeJSON(res, http.StatusBadGateway, `{"errcode":50001,"errmsg":"failed to get access token"}`)
-		return
-	}
-
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		writeJSON(res, http.StatusBadRequest, `{"errcode":40001,"errmsg":"invalid request body"}`)
-		return
-	}
-
-	var requestBody MailRequestBody
-	if err = json.Unmarshal(body, &requestBody); err != nil {
-		writeJSON(res, http.StatusBadRequest, `{"errcode":40002,"errmsg":"invalid json format"}`)
-		return
-	}
-
-	if requestBody.Sendkey != Sendkey {
-		writeJSON(res, http.StatusUnauthorized, `{"errcode":40001,"errmsg":"invalid sendkey"}`)
-		return
-	}
-
-	if status, body := validateMailRequestBody(&requestBody); status != 0 {
-		writeJSON(res, status, body)
-		return
-	}
-
-	postData := map[string]interface{}{
-		"to":      requestBody.To,
-		"subject": requestBody.Subject,
-		"content": requestBody.Content,
-	}
-
-	// 添加底部访问链接
-	if MailFooterUrl != "" || requestBody.ServerName != "" || requestBody.ServerIP != "" {
-		var footer string
-		if requestBody.ContentType == "text" {
-			footer = ""
-			if requestBody.ServerName != "" || requestBody.ServerIP != "" {
-				footer = "\n\n" + requestBody.ServerName + ":" + requestBody.ServerIP + " 已离线"
-			}
-			if MailFooterUrl != "" {
-				footer += "\n访问地址: " + MailFooterUrl
-			}
-		} else {
-			footer = "<br>"
-			if requestBody.ServerName != "" || requestBody.ServerIP != "" {
-				footer += "<br><b>" + requestBody.ServerName + ":" + requestBody.ServerIP + "</b> 已离线"
-			}
-			if MailFooterUrl != "" {
-				footer += "<br><a href='" + MailFooterUrl + "' target='_blank'>访问地址</a>"
-			}
-		}
-		postData["content"] = postData["content"].(string) + footer
-	}
-
-	if requestBody.Cc.Emails != nil || requestBody.Cc.Userids != nil {
-		postData["cc"] = requestBody.Cc
-	}
-	if requestBody.Bcc.Emails != nil || requestBody.Bcc.Userids != nil {
-		postData["bcc"] = requestBody.Bcc
-	}
-	if requestBody.ContentType != "" {
-		postData["content_type"] = requestBody.ContentType
-	}
-	if len(requestBody.AttachmentList) > 0 {
-		postData["attachment_list"] = requestBody.AttachmentList
-	}
-	if requestBody.EnableIdTrans != 0 {
-		postData["enable_id_trans"] = requestBody.EnableIdTrans
-	}
-
-	writeJSON(res, http.StatusOK, SendMailMessage(accessToken, postData))
-}
-
 func wecomChan(res http.ResponseWriter, req *http.Request) {
 	if !requirePost(res, req) {
 		return
@@ -171,6 +88,98 @@ func wecomChan(res http.ResponseWriter, req *http.Request) {
 		accessToken = GetAccessToken()
 	}
 	writeJSON(res, http.StatusOK, postStatus)
+}
+
+func mailHandler(res http.ResponseWriter, req *http.Request) {
+	if !requirePost(res, req) {
+		return
+	}
+	res.Header().Set("Content-Type", "application/json")
+	req.Body = http.MaxBytesReader(res, req.Body, 1<<20)
+
+	accessToken := GetAccessToken()
+	if accessToken == "" {
+		writeJSON(res, http.StatusBadGateway, `{"errcode":50001,"errmsg":"failed to get access token"}`)
+		return
+	}
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		writeJSON(res, http.StatusBadRequest, `{"errcode":40001,"errmsg":"invalid request body"}`)
+		return
+	}
+
+	var requestBody MailRequestBody
+	if err = json.Unmarshal(body, &requestBody); err != nil {
+		writeJSON(res, http.StatusBadRequest, `{"errcode":40002,"errmsg":"invalid json format"}`)
+		return
+	}
+
+	if requestBody.Sendkey != Sendkey {
+		writeJSON(res, http.StatusUnauthorized, `{"errcode":40001,"errmsg":"invalid sendkey"}`)
+		return
+	}
+
+	if status, body := validateMailRequestBody(&requestBody); status != 0 {
+		writeJSON(res, status, body)
+		return
+	}
+
+	postData := map[string]interface{}{
+		"to":      requestBody.To,
+		"subject": requestBody.Subject,
+		"content": requestBody.Content,
+	}
+
+	if requestBody.Cc.Emails != nil || requestBody.Cc.Userids != nil {
+		postData["cc"] = requestBody.Cc
+	}
+	if requestBody.Bcc.Emails != nil || requestBody.Bcc.Userids != nil {
+		postData["bcc"] = requestBody.Bcc
+	}
+	if requestBody.ContentType != "" {
+		postData["content_type"] = requestBody.ContentType
+	}
+	if len(requestBody.AttachmentList) > 0 {
+		postData["attachment_list"] = requestBody.AttachmentList
+	}
+	if requestBody.EnableIdTrans != 0 {
+		postData["enable_id_trans"] = requestBody.EnableIdTrans
+	}
+
+	writeJSON(res, http.StatusOK, SendMailMessage(accessToken, postData))
+}
+
+func pushHandler(res http.ResponseWriter, req *http.Request) {
+	if !requirePost(res, req) {
+		return
+	}
+	res.Header().Set("Content-Type", "application/json")
+	req.Body = http.MaxBytesReader(res, req.Body, 1<<20)
+
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		writeJSON(res, http.StatusBadRequest, `{"errcode":40001,"errmsg":"invalid request body"}`)
+		return
+	}
+
+	var pushReq PushRequestBody
+	if err = json.Unmarshal(body, &pushReq); err != nil {
+		writeJSON(res, http.StatusBadRequest, `{"errcode":40002,"errmsg":"invalid json format"}`)
+		return
+	}
+
+	if pushReq.Sendkey != Sendkey {
+		writeJSON(res, http.StatusUnauthorized, `{"errcode":40001,"errmsg":"invalid sendkey"}`)
+		return
+	}
+	if pushReq.Content == "" {
+		writeJSON(res, http.StatusBadRequest, `{"errcode":44004,"errmsg":"content is empty"}`)
+		return
+	}
+
+	result := SendPush(&pushReq)
+	writeJSON(res, http.StatusOK, result)
 }
 
 func healthz(res http.ResponseWriter, req *http.Request) {

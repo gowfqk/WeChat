@@ -99,3 +99,4 @@ func validateMailRequestBody(requestBody *MailRequestBody) (int, string) {
 	}
 	return 0, ""
 }
+

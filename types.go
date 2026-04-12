@@ -22,6 +22,41 @@ type Markdown struct {
 	Content string `json:"content"`
 }
 
+type MailRequestBody struct {
+	Sendkey        string           `json:"sendkey"`
+	To             MailRecipient    `json:"to"`
+	Cc             MailRecipient    `json:"cc,omitempty"`
+	Bcc            MailRecipient    `json:"bcc,omitempty"`
+	Subject        string           `json:"subject"`
+	Content        string           `json:"content"`
+	ContentType    string           `json:"content_type,omitempty"`
+	AttachmentList []MailAttachment `json:"attachment_list,omitempty"`
+	EnableIdTrans  uint32           `json:"enable_id_trans,omitempty"`
+}
+
+type MailRecipient struct {
+	Emails  []string `json:"emails,omitempty"`
+	Userids []string `json:"userids,omitempty"`
+}
+
+type MailAttachment struct {
+	FileName string `json:"file_name"`
+	Content  string `json:"content"`
+}
+
+type PushRequestBody struct {
+	Sendkey    string `json:"sendkey"`
+	Channel    string `json:"channel"`
+	Title      string `json:"title,omitempty"`
+	Content    string `json:"content"`
+	MsgType    string `json:"msg_type,omitempty"`
+	ToUser     string `json:"touser,omitempty"`
+	AgentId    string `json:"agentid,omitempty"`
+	DingSecret string `json:"ding_secret,omitempty"`
+	ChatId     string `json:"chat_id,omitempty"`
+	BarkUrl    string `json:"bark_url,omitempty"`
+}
+
 type JsonData struct {
 	ToUser                 string   `json:"touser"`
 	AgentId                string   `json:"agentid"`

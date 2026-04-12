@@ -12,15 +12,15 @@ COPY . .
 
 RUN apk update && apk upgrade && apk add --no-cache ca-certificates
 RUN update-ca-certificates
-RUN go build
+RUN go build -o go-push
 
 FROM scratch
 
 WORKDIR /root
 
-COPY --from=gobuilder /go/src/app/wecomchan .
+COPY --from=gobuilder /go/src/app/go-push .
 COPY --from=gobuilder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 
 EXPOSE 8080
 
-CMD ["./wecomchan"]
+CMD ["./go-push"]

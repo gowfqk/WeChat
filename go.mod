@@ -1,4 +1,4 @@
-module go/wecomchan
+module go/push
 
 go 1.16
 
